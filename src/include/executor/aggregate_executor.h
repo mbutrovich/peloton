@@ -24,6 +24,8 @@ class DataTable;
 
 namespace executor {
 
+typedef std::vector<type::Value> AggKeyType;
+
 /**
  * The actual executor class templated on the type of aggregation that
  * should be performed.
@@ -57,6 +59,9 @@ class AggregateExecutor : public AbstractExecutor {
 
   bool DExecute();
 
+  bool DExecuteSequential();
+  bool DExecuteParallel();
+
   //===--------------------------------------------------------------------===//
   // Executor State
   //===--------------------------------------------------------------------===//
@@ -72,6 +77,19 @@ class AggregateExecutor : public AbstractExecutor {
 
   /** @brief Output table. */
   storage::AbstractTable *output_table = nullptr;
+
+ private:
+  constexpr size_t num_threads_ = 4;
+  std::thread threads_[num_threads]
+  std::shared_ptr<std::unordered_map> local_hash_tables_[num_threads_];
+  std::shared_ptr<std::unordered_map> global_hash_tables_[num_threads_];
+  std::shared_ptr<std::vector> partitioned_keys[num_threads_][num_threads_];
+  std::shared_ptr<DataTable> output_tables_[num_threads_];
+
+  void ParallelAggregatorThread(size_t tid, std::shared_ptr<LogicalTile> tile);
+  static size_t ChunkRange(size_t num_tuples, size_t tid);
+  std::atomic<int> arrival_count_;
+  std::atomic<bool> phase_completed_;
 };
 
 }  // namespace executor

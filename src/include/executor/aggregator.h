@@ -49,7 +49,8 @@ class AbstractAttributeAggregator {
   virtual void DAdvance(const type::Value &val) = 0;
   virtual type::Value DFinalize() = 0;
 
- private:
+  virtual void DCombine(const AbstractAttributeAggregator &agg) = 0;
+
   typedef std::unordered_set<type::Value, type::Value::hash,
                              type::Value::equal_to>
       DistinctSetType;
@@ -81,6 +82,11 @@ class SumAggregator : public AbstractAttributeAggregator {
     if (!have_advanced)
       return type::ValueFactory::GetNullValueByType(type::TypeId::INTEGER);
     return aggregate;
+  }
+
+  virtual void DCombine(AbstractAttributeAggregator *agg) override {
+    auto sum_agg = dynamic_cast<SumAttributeAggregator *>(agg);
+    DAdvance(sum_agg.aggregate)
   }
 
  private:
@@ -130,7 +136,18 @@ class AvgAggregator : public AbstractAttributeAggregator {
     return final_result;
   }
 
- private:
+  virtual void DCombine(AbstractAttributeAggregator *agg) override {
+    auto avg_agg = dynamic_cast<AvgAttributeAggregator *>(agg);
+
+    if (count == 0) {
+      aggregate = avg_agg.aggregate.Copy();
+    } else {
+      aggregate = aggregate.Add(avg_agg.aggregate);
+    }
+    aggregate = aggregate.Add(avg_agg.aggregate);
+    count += avg_agg.count;
+  }
+
   /** @brief aggregate initialized on first advance. */
   type::Value aggregate;
 
@@ -157,7 +174,11 @@ class CountAggregator : public AbstractAttributeAggregator {
 
   type::Value DFinalize() { return type::ValueFactory::GetBigIntValue(count); }
 
- private:
+  virtual void DCombine(AbstractAttributeAggregator *agg) {
+    auto count_agg = dynamic_cast<CountAttributeAggregator *>(agg);
+    count += count_agg.count;
+  }
+
   int64_t count;
 };
 
@@ -169,7 +190,11 @@ class CountStarAggregator : public AbstractAttributeAggregator {
 
   type::Value DFinalize() { return type::ValueFactory::GetBigIntValue(count); }
 
- private:
+  virtual void DCombine(AbstractAttributeAggregator *agg) {
+    auto count_star_agg = dynamic_cast<CountStarAttributeAggregator *>(agg);
+    count += count_star_agg.count;
+  }
+
   int64_t count;
 };
 
@@ -193,7 +218,11 @@ class MaxAggregator : public AbstractAttributeAggregator {
 
   type::Value DFinalize() { return aggregate; }
 
- private:
+  virtual void DCombine(AbstractAttributeAggregator *agg) {
+    auto max_agg = dynamic_cast<MaxAttributeAggregator *>(agg);
+    DAdvance(max_agg.aggregate)
+  }
+
   type::Value aggregate;
 
   bool have_advanced;
@@ -220,7 +249,11 @@ class MinAggregator : public AbstractAttributeAggregator {
 
   type::Value DFinalize() { return aggregate; }
 
- private:
+  virtual void DCombine(AbstractAttributeAggregator *agg) {
+    auto min_agg = dynamic_cast<MinAttributeAggregator *>(agg);
+    DAdvance(min_agg.aggregate)
+  }
+
   type::Value aggregate;
 
   bool have_advanced;
@@ -324,6 +357,74 @@ class HashAggregator : public AbstractAggregator {
   HashAggregateMapType aggregates_map;
 };
 
+/////////////////////////////////////////////////////////////////////////
+// Parallel Hash Aggregator definitions
+///////////////////////////////////////////////////////////////////////////
+
+// Default equal_to should works well
+typedef std::unordered_map<std::vector<type::Value>, AggregateList *,
+                           ValueVectorHasher, ValueVectorCmp>
+    HashAggregateMapType;
+
+/** List of aggregates for a specific group. */
+struct AggregateList {
+  // Keep a deep copy of the first tuple we met of this group
+  std::vector<type::Value> first_tuple_values;
+
+  // The aggregates for each column for this group
+  AbstractAttributeAggregator **aggregates;
+};
+
+/** Hash function of internal hash table */
+struct ValueVectorHasher
+    : std::unary_function<std::vector<type::Value>, std::size_t> {
+  // Generate a 64-bit number for the a vector of value
+  size_t operator()(const std::vector<type::Value> &values) const {
+    size_t seed = 0;
+    for (auto v : values) {
+      v.HashCombine(seed);
+    }
+    return seed;
+  }
+};
+
+struct ValueVectorCmp {
+  bool operator()(const std::vector<type::Value> &lhs,
+                  const std::vector<type::Value> &rhs) const {
+    for (size_t i = 0; i < lhs.size() && i < rhs.size(); i++) {
+      if (lhs[i].CompareNotEquals(rhs[i]) == CmpBool::CmpTrue) return false;
+    }
+    if (lhs.size() == rhs.size()) return true;
+    return false;
+  }
+};
+
+class ParallelHashAggregator : public AbstractAggregator {
+ public:
+  ParallelHashAggregator(const planner::AggregatePlan *node,
+                 storage::AbstractTable *output_table,
+                 executor::ExecutorContext *econtext, size_t num_input_columns,
+                 std::shared_ptr<HashAggregateMapType> _aggregates_map,
+                 std::shared_ptr<std::vector> **_partitioned_keys
+                 size_t num_threads_);
+
+  bool Advance(AbstractTuple *next_tuple) override;
+
+  bool Finalize() override;
+
+  ~ParallelHashAggregator();
+
+ private:
+  const size_t num_input_columns;
+
+  /** @brief Group by key values used */
+  std::vector<type::Value> group_by_key_values;
+
+  /** @brief Hash table */
+  std::shared_ptr<HashAggregateMapType> aggregates_map;
+
+  std::shared_ptr<std::vector> *partitioned_keys);
+};
 /**
  * @brief Used when input is sorted on group-by keys.
  */

@@ -241,6 +241,106 @@ bool HashAggregator::Finalize() {
 }
 
 //===--------------------------------------------------------------------===//
+// ParallelHash Aggregator
+//===--------------------------------------------------------------------===//
+ParallelHashAggregator::ParallelHashAggregator(const planner::AggregatePlan *node,
+                               storage::AbstractTable *output_table,
+                               executor::ExecutorContext *econtext,
+                               size_t num_input_columns,
+                               std::shared_ptr<HashAggregateMapType> _aggregates_map,
+                               std::shared_ptr<std::vector> **_partitioned_keys,
+                               size_t num_threads_)
+    : AbstractAggregator(node, output_table, econtext),
+      num_input_columns(num_input_columns),
+  		aggregates_map(_aggregates_map),
+  		partitioned_keys{*_partitioned_keys}
+
+ParallelHashAggregator::~ParallelHashAggregator() {
+  for (auto entry : *aggregates_map) {
+    // Clean up allocated storage
+    for (size_t aggno = 0; aggno < node->GetUniqueAggTerms().size(); aggno++) {
+      delete entry.second->aggregates[aggno];
+    }
+    delete[] entry.second->aggregates;
+    delete entry.second;
+  }
+}
+
+bool ParallelHashAggregator::Advance(AbstractTuple *cur_tuple) {
+  AggregateList *aggregate_list;
+
+  // Configure a group-by-key and search for the required group.
+  group_by_key_values.clear();
+  for (oid_t column_itr = 0; column_itr < node->GetGroupbyColIds().size();
+       column_itr++) {
+    type::Value cur_tuple_val =
+        cur_tuple->GetValue(node->GetGroupbyColIds()[column_itr]);
+    group_by_key_values.push_back(cur_tuple_val);
+  }
+
+  auto map_itr = aggregates_map->find(group_by_key_values);
+
+  // Group not found. Make a new entry in the hash for this new group.
+  if (map_itr == aggregates_map->end()) {
+    size_t partition = ValueVectorHasher(group_by_key_values) % num_threads;
+    partitioned_keys[partition].push_back(group_by_key_values);
+
+    LOG_TRACE("Group-by key not found. Start a new group.");
+    // Allocate new aggregate list
+    aggregate_list = new AggregateList();
+    aggregate_list->aggregates = new AbstractAttributeAggregator *[node->GetUniqueAggTerms().size()];
+    // Make a deep copy of the first tuple we meet
+    for (size_t col_id = 0; col_id < num_input_columns; col_id++) {
+      // first_tuple_values has the ownership
+      aggregate_list->first_tuple_values.push_back(cur_tuple->GetValue(col_id));
+    };
+
+    for (oid_t aggno = 0; aggno < node->GetUniqueAggTerms().size(); aggno++) {
+      aggregate_list->aggregates[aggno] =
+          GetAttributeAggregatorInstance(node->GetUniqueAggTerms()[aggno].aggtype);
+
+      bool distinct = node->GetUniqueAggTerms()[aggno].distinct;
+      aggregate_list->aggregates[aggno]->SetDistinct(distinct);
+    }
+
+    aggregates_map->insert(
+        HashAggregateMapType::value_type(group_by_key_values, aggregate_list));
+  }
+  // Otherwise, the list is the second item of the pair.
+  else {
+    // don't need to add to unique keys since we've seen this before
+    aggregate_list = map_itr->second;
+  }
+
+  // Update the aggregation calculation
+  for (oid_t aggno = 0; aggno < node->GetUniqueAggTerms().size(); aggno++) {
+    auto predicate = node->GetUniqueAggTerms()[aggno].expression;
+    type::Value value = type::ValueFactory::GetIntegerValue(1).Copy();
+    if (predicate) {
+      value = node->GetUniqueAggTerms()[aggno].expression->Evaluate(
+          cur_tuple, nullptr, this->executor_context);
+    }
+
+    aggregate_list->aggregates[aggno]->Advance(value);
+  }
+
+  return true;
+}
+
+bool ParallelHashAggregator::Finalize() {
+  for (auto entry : *aggregates_map) {
+    // Construct a container for the first tuple
+    ContainerTuple<std::vector<type::Value>> first_tuple(
+        &entry.second->first_tuple_values);
+    if (Helper(node, entry.second->aggregates, output_table, &first_tuple,
+               this->executor_context) == false) {
+      return false;
+    }
+  }
+  return true;
+}
+
+//===--------------------------------------------------------------------===//
 // Sort Aggregator
 //===--------------------------------------------------------------------===//
 
