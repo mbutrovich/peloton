@@ -248,13 +248,13 @@ ParallelHashAggregator::ParallelHashAggregator(const planner::AggregatePlan *nod
                                executor::ExecutorContext *econtext,
                                size_t num_input_columns,
                                std::shared_ptr<HashAggregateMapType> _aggregates_map,
-                               std::shared_ptr<std::vector<AggKeyType>> **_partitioned_keys,
+                               std::shared_ptr<std::vector<AggKeyType>> *_partitioned_keys,
                                size_t _num_threads)
     : AbstractAggregator(node, output_table, econtext),
       num_input_columns(num_input_columns),
       num_threads_(_num_threads),
   		aggregates_map(_aggregates_map),
-  		partitioned_keys(*_partitioned_keys) {}
+  		partitioned_keys(_partitioned_keys) {}
 
 ParallelHashAggregator::~ParallelHashAggregator() {
   for (auto entry : *aggregates_map) {

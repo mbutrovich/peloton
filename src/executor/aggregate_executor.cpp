@@ -225,7 +225,6 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
   output_tables_[my_tid].reset(storage::TableFactory::GetTempTable(output_table_schema, false));
   local_hash_tables_[my_tid] = std::make_shared<HashAggregateMapType>();
 
-  partitioned_keys_[my_tid] = new std::shared_ptr<std::vector<AggKeyType>>[num_threads_];
   for (size_t partition = 0; partition < num_threads_; partition++) {
     partitioned_keys_[my_tid][partition] = std::make_shared<std::vector<AggKeyType>>();
   }
@@ -290,7 +289,7 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
             }
           }
         }
-        my_global_hash_table->insert(key, new_entry);
+        (*my_global_hash_table)[key] = new_entry;
       }
     }
   }
@@ -316,19 +315,12 @@ bool AggregateExecutor::DExecuteParallel() {
 
   // Initialize num_threads aggregators
   for (size_t tid = 0; tid < num_threads_; tid++) {
-    threads_[tid] = std::thread(ParallelAggregatorThread, tid, tile);
+    threads_[tid] = std::thread(&AggregateExecutor::ParallelAggregatorThread, this, tid, tile);
   }
 
   // join all threads
   for (size_t tid = 0; tid < num_threads_; tid++) {
     threads_[tid].join();
-  }
-
-  for (size_t tid = 0; tid < num_threads_; tid++) {
-    if (return_vals_[tid] == false) {
-      done = true;
-      return false;
-    }
   }
 
   bool no_results = true;
@@ -381,6 +373,7 @@ bool AggregateExecutor::DExecuteParallel() {
   				// wrap tile_group in a logical_tile and push onto result vector
   for (size_t tid = 0; tid < num_threads_; tid++) {
     if (output_tables_[tid] != nullptr) {
+      auto tile_group_count = output_tables_[tid]->GetTileGroupCount();
       for (oid_t tile_group_itr = 0; tile_group_itr < tile_group_count;
         tile_group_itr++) {
         auto tile_group = output_tables_[tid]->GetTileGroup(tile_group_itr);
