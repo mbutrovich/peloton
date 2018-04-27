@@ -2,9 +2,9 @@
 //
 //                         Peloton
 //
-// aggregate_test.cpp
+// parallel_aggregates_test.cpp
 //
-// Identification: test/executor/sequential_aggregate_test.cpp
+// Identification: test/executor/parallel_aggregates_test.cpp
 //
 // Copyright (c) 2015-16, Carnegie Mellon University Database Group
 //
@@ -38,9 +38,9 @@ using ::testing::Return;
 namespace peloton {
 namespace test {
 
-class SequentialAggregateTests : public PelotonTest {};
+class ParallelAggregatesTests : public PelotonTest {};
 
-TEST_F(SequentialAggregateTests, HashSumGroupByTest) {
+TEST_F(ParallelAggregatesTests, HashSumGroupByTest) {
   // SELECT b, SUM(c) from table GROUP BY b;
 //  const int tuple_count = TESTS_TUPLES_PER_TILEGROUP;
 
