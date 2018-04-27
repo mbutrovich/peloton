@@ -32,6 +32,7 @@ class AbstractTable;
 }
 
 namespace executor {
+typedef std::vector<type::Value> AggKeyType;
 
 /*
  * Base class for an individual aggregate that aggregates a specific
@@ -49,7 +50,7 @@ class AbstractAttributeAggregator {
   virtual void DAdvance(const type::Value &val) = 0;
   virtual type::Value DFinalize() = 0;
 
-  virtual void DCombine(const AbstractAttributeAggregator &agg) = 0;
+  virtual void DCombine(const AbstractAttributeAggregator *agg) = 0;
 
   typedef std::unordered_set<type::Value, type::Value::hash,
                              type::Value::equal_to>
@@ -66,7 +67,7 @@ class SumAggregator : public AbstractAttributeAggregator {
     // aggregate initialized on first advance
   }
 
-  void DAdvance(const type::Value &val) {
+  void DAdvance(const type::Value &val) override {
     if (val.IsNull()) {
       return;
     }
@@ -78,15 +79,15 @@ class SumAggregator : public AbstractAttributeAggregator {
     }
   }
 
-  type::Value DFinalize() {
+  type::Value DFinalize() override {
     if (!have_advanced)
       return type::ValueFactory::GetNullValueByType(type::TypeId::INTEGER);
     return aggregate;
   }
 
-  virtual void DCombine(AbstractAttributeAggregator *agg) override {
-    auto sum_agg = dynamic_cast<SumAttributeAggregator *>(agg);
-    DAdvance(sum_agg.aggregate)
+  virtual void DCombine(const AbstractAttributeAggregator *agg) override {
+    auto sum_agg = dynamic_cast<const SumAggregator *>(agg);
+    DAdvance(sum_agg->aggregate);
   }
 
  private:
@@ -101,7 +102,7 @@ class AvgAggregator : public AbstractAttributeAggregator {
     default_delta = type::ValueFactory::GetIntegerValue(1);
   }
 
-  void DAdvance(const type::Value &val) { this->DAdvance(val, default_delta); }
+  void DAdvance(const type::Value &val) override { this->DAdvance(val, default_delta); }
 
   void DAdvance(const type::Value &val, const type::Value &delta) {
     if (val.IsNull()) {
@@ -127,7 +128,7 @@ class AvgAggregator : public AbstractAttributeAggregator {
     }
   }
 
-  type::Value DFinalize() {
+  type::Value DFinalize() override {
     if (count == 0) {
       return type::ValueFactory::GetNullValueByType(type::TypeId::INTEGER);
     }
@@ -136,16 +137,16 @@ class AvgAggregator : public AbstractAttributeAggregator {
     return final_result;
   }
 
-  virtual void DCombine(AbstractAttributeAggregator *agg) override {
-    auto avg_agg = dynamic_cast<AvgAttributeAggregator *>(agg);
+  virtual void DCombine(const AbstractAttributeAggregator *agg) override {
+    auto avg_agg = dynamic_cast<const AvgAggregator *>(agg);
 
     if (count == 0) {
-      aggregate = avg_agg.aggregate.Copy();
+      aggregate = avg_agg->aggregate.Copy();
     } else {
-      aggregate = aggregate.Add(avg_agg.aggregate);
+      aggregate = aggregate.Add(avg_agg->aggregate);
     }
-    aggregate = aggregate.Add(avg_agg.aggregate);
-    count += avg_agg.count;
+    aggregate = aggregate.Add(avg_agg->aggregate);
+    count += avg_agg->count;
   }
 
   /** @brief aggregate initialized on first advance. */
@@ -165,18 +166,18 @@ class CountAggregator : public AbstractAttributeAggregator {
  public:
   CountAggregator() : count(0) {}
 
-  void DAdvance(const type::Value &val) {
+  void DAdvance(const type::Value &val) override {
     if (val.IsNull()) {
       return;
     }
     count++;
   }
 
-  type::Value DFinalize() { return type::ValueFactory::GetBigIntValue(count); }
+  type::Value DFinalize() override { return type::ValueFactory::GetBigIntValue(count); }
 
-  virtual void DCombine(AbstractAttributeAggregator *agg) {
-    auto count_agg = dynamic_cast<CountAttributeAggregator *>(agg);
-    count += count_agg.count;
+  virtual void DCombine(const AbstractAttributeAggregator *agg) override {
+    auto count_agg = dynamic_cast<const CountAggregator *>(agg);
+    count += count_agg->count;
   }
 
   int64_t count;
@@ -186,13 +187,13 @@ class CountStarAggregator : public AbstractAttributeAggregator {
  public:
   CountStarAggregator() : count(0) {}
 
-  void DAdvance(const type::Value &val UNUSED_ATTRIBUTE) { ++count; }
+  void DAdvance(const type::Value &val UNUSED_ATTRIBUTE) override { ++count; }
 
-  type::Value DFinalize() { return type::ValueFactory::GetBigIntValue(count); }
+  type::Value DFinalize() override { return type::ValueFactory::GetBigIntValue(count); }
 
-  virtual void DCombine(AbstractAttributeAggregator *agg) {
-    auto count_star_agg = dynamic_cast<CountStarAttributeAggregator *>(agg);
-    count += count_star_agg.count;
+  virtual void DCombine(const AbstractAttributeAggregator *agg) override {
+    auto count_star_agg = dynamic_cast<const CountStarAggregator *>(agg);
+    count += count_star_agg->count;
   }
 
   int64_t count;
@@ -204,7 +205,7 @@ class MaxAggregator : public AbstractAttributeAggregator {
     aggregate = type::ValueFactory::GetNullValueByType(type::TypeId::INTEGER);
   }
 
-  void DAdvance(const type::Value &val) {
+  void DAdvance(const type::Value &val) override {
     if (val.IsNull()) {
       return;
     }
@@ -216,11 +217,11 @@ class MaxAggregator : public AbstractAttributeAggregator {
     }
   }
 
-  type::Value DFinalize() { return aggregate; }
+  type::Value DFinalize() override { return aggregate; }
 
-  virtual void DCombine(AbstractAttributeAggregator *agg) {
-    auto max_agg = dynamic_cast<MaxAttributeAggregator *>(agg);
-    DAdvance(max_agg.aggregate)
+  virtual void DCombine(const AbstractAttributeAggregator *agg) override {
+    auto max_agg = dynamic_cast<const MaxAggregator *>(agg);
+    DAdvance(max_agg->aggregate);
   }
 
   type::Value aggregate;
@@ -234,7 +235,7 @@ class MinAggregator : public AbstractAttributeAggregator {
     aggregate = type::ValueFactory::GetNullValueByType(type::TypeId::INTEGER);
   }
 
-  void DAdvance(const type::Value &val) {
+  void DAdvance(const type::Value &val) override {
     if (val.IsNull()) {
       return;
     }
@@ -247,11 +248,11 @@ class MinAggregator : public AbstractAttributeAggregator {
     }
   }
 
-  type::Value DFinalize() { return aggregate; }
+  type::Value DFinalize() override { return aggregate; }
 
-  virtual void DCombine(AbstractAttributeAggregator *agg) {
-    auto min_agg = dynamic_cast<MinAttributeAggregator *>(agg);
-    DAdvance(min_agg.aggregate)
+  virtual void DCombine(const AbstractAttributeAggregator *agg) override {
+    auto min_agg = dynamic_cast<const MinAggregator *>(agg);
+    DAdvance(min_agg->aggregate);
   }
 
   type::Value aggregate;
@@ -361,11 +362,6 @@ class HashAggregator : public AbstractAggregator {
 // Parallel Hash Aggregator definitions
 ///////////////////////////////////////////////////////////////////////////
 
-// Default equal_to should works well
-typedef std::unordered_map<std::vector<type::Value>, AggregateList *,
-                           ValueVectorHasher, ValueVectorCmp>
-    HashAggregateMapType;
-
 /** List of aggregates for a specific group. */
 struct AggregateList {
   // Keep a deep copy of the first tuple we met of this group
@@ -399,14 +395,19 @@ struct ValueVectorCmp {
   }
 };
 
+// Default equal_to should works well
+typedef std::unordered_map<std::vector<type::Value>, AggregateList *,
+                           ValueVectorHasher, ValueVectorCmp>
+    HashAggregateMapType;
+
 class ParallelHashAggregator : public AbstractAggregator {
  public:
   ParallelHashAggregator(const planner::AggregatePlan *node,
                  storage::AbstractTable *output_table,
                  executor::ExecutorContext *econtext, size_t num_input_columns,
                  std::shared_ptr<HashAggregateMapType> _aggregates_map,
-                 std::shared_ptr<std::vector> **_partitioned_keys
-                 size_t num_threads_);
+                 std::shared_ptr<std::vector<AggKeyType>> *_partitioned_keys,
+                 size_t _num_threads);
 
   bool Advance(AbstractTuple *next_tuple) override;
 
@@ -416,6 +417,7 @@ class ParallelHashAggregator : public AbstractAggregator {
 
  private:
   const size_t num_input_columns;
+  const size_t num_threads_;
 
   /** @brief Group by key values used */
   std::vector<type::Value> group_by_key_values;
@@ -423,7 +425,7 @@ class ParallelHashAggregator : public AbstractAggregator {
   /** @brief Hash table */
   std::shared_ptr<HashAggregateMapType> aggregates_map;
 
-  std::shared_ptr<std::vector> *partitioned_keys);
+  std::shared_ptr<std::vector<AggKeyType>> *partitioned_keys;
 };
 /**
  * @brief Used when input is sorted on group-by keys.

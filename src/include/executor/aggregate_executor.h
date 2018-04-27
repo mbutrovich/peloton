@@ -13,6 +13,7 @@
 #pragma once
 
 #include "executor/abstract_executor.h"
+#include "executor/aggregator.h"
 
 #include <vector>
 
@@ -23,8 +24,6 @@ class DataTable;
 }
 
 namespace executor {
-
-typedef std::vector<type::Value> AggKeyType;
 
 /**
  * The actual executor class templated on the type of aggregation that
@@ -79,15 +78,16 @@ class AggregateExecutor : public AbstractExecutor {
   storage::AbstractTable *output_table = nullptr;
 
  private:
-  constexpr size_t num_threads_ = 4;
-  std::thread threads_[num_threads]
-  std::shared_ptr<std::unordered_map> local_hash_tables_[num_threads_];
-  std::shared_ptr<std::unordered_map> global_hash_tables_[num_threads_];
-  std::shared_ptr<std::vector> partitioned_keys[num_threads_][num_threads_];
-  std::shared_ptr<DataTable> output_tables_[num_threads_];
+  static constexpr size_t num_threads_ = 4;
+  std::thread threads_[num_threads_];
+  std::shared_ptr<HashAggregateMapType> local_hash_tables_[num_threads_];
+  std::shared_ptr<HashAggregateMapType> global_hash_tables_[num_threads_];
+  std::shared_ptr<std::vector<AggKeyType>> partitioned_keys_[num_threads_][num_threads_];
+  std::shared_ptr<storage::AbstractTable> output_tables_[num_threads_];
 
   void ParallelAggregatorThread(size_t tid, std::shared_ptr<LogicalTile> tile);
   static size_t ChunkRange(size_t num_tuples, size_t tid);
+  void CombineEntries(AggregateList *new_entry, AggregateList *local_entry);
   std::atomic<int> arrival_count_;
   std::atomic<bool> phase_completed_;
 };

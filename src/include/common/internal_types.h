@@ -754,7 +754,8 @@ enum class AggregateType {
   INVALID = INVALID_TYPE_ID,
   SORTED = 1,
   HASH = 2,
-  PLAIN = 3  // no group-by
+  PLAIN = 3, // no group-by
+  PARALLEL_HASH = 4
 };
 std::string AggregateTypeToString(AggregateType type);
 AggregateType StringToAggregateType(const std::string &str);

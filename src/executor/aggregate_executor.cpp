@@ -14,7 +14,6 @@
 #include "common/logger.h"
 #include "concurrency/transaction_manager_factory.h"
 #include "executor/aggregate_executor.h"
-#include "executor/aggregator.h"
 #include "executor/executor_context.h"
 #include "executor/logical_tile_factory.h"
 #include "planner/aggregate_plan.h"
@@ -90,7 +89,7 @@ bool AggregateExecutor::DExecute() {
   // Initialize the aggregator
   const planner::AggregatePlan &node = GetPlanNode<planner::AggregatePlan>();
 
-  if (node.GetAggregateStrategy() == AggregateType::SEQUENTIAL_HASH) {
+  if (node.GetAggregateStrategy() == AggregateType::HASH) {
 
     LOG_TRACE("Use Sequential Hash");
     return DExecuteSequential();
@@ -195,7 +194,7 @@ bool AggregateExecutor::DExecuteSequential() {
   return true;
 }
 
-static size_t AggregateExecutor::ChunkRange(size_t num_tuples, size_t tid) {
+size_t AggregateExecutor::ChunkRange(size_t num_tuples, size_t tid) {
 	size_t base = num_tuples / num_threads_;
 	size_t extra = num_tuples % num_threads_;
 	if (tid < extra)
@@ -206,17 +205,25 @@ static size_t AggregateExecutor::ChunkRange(size_t num_tuples, size_t tid) {
 
 void AggregateExecutor::CombineEntries(AggregateList *new_entry,
                                        AggregateList *local_entry) {
-  for (size_t i=0; i < node->GetUniqueAggTerms().size(); i++) {
-    new_entry.aggregates[i].DCombine(local_entry.aggregates[i]);
+  // Grab info from plan node
+  const planner::AggregatePlan &node = GetPlanNode<planner::AggregatePlan>();
+  for (size_t i=0; i < node.GetUniqueAggTerms().size(); i++) {
+    new_entry->aggregates[i]->DCombine(local_entry->aggregates[i]);
   }
 }
 
 
 void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<LogicalTile> tile) {
+  // Grab info from plan node
+  const planner::AggregatePlan &node = GetPlanNode<planner::AggregatePlan>();
+
+  // Construct the output table
+  auto output_table_schema =
+      const_cast<catalog::Schema *>(node.GetOutputSchema());
 
   // Phase 1 //////////////////////////////////////////////////
-  output_tables_[my_tid] = storage::TableFactory::GetTempTable(output_table_schema, false);
-  local_hash_tables_[my_tid] = std::make_shared<HashAggregateMapType>>();
+  output_tables_[my_tid].reset(storage::TableFactory::GetTempTable(output_table_schema, false));
+  local_hash_tables_[my_tid] = std::make_shared<HashAggregateMapType>();
 
   partitioned_keys_[my_tid] = new std::shared_ptr<std::vector<AggKeyType>>[num_threads_];
   for (size_t partition = 0; partition < num_threads_; partition++) {
@@ -225,20 +232,22 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
 
   // create a local hash table of group by keys
   std::unique_ptr<AbstractAggregator> aggregator(
-    new ParallelHashAggregator(&node, output_tables_[tid],
-      executor_context_, tile->GetColumnCount(),
-      local_hash_tables_[my_tid]), &partitioned_keys_[my_tid, num_threads_]
+    new ParallelHashAggregator(&node,
+                               output_tables_[my_tid].get(),
+                               executor_context_,
+                               tile->GetColumnCount(),
+                               local_hash_tables_[my_tid],
+                               partitioned_keys_[my_tid],
+                               num_threads_)
   );
 
   // hash each tuple by its group by key to compute aggregates
   LOG_TRACE("TID %lu: Looping over tile..", tid);
   size_t tuple_count = tile->GetTupleCount();
-  size_t tuple_id_start = ChunkRange(tuple_count, tid)
-  size_t tuple_id_end = ChunkRange(tuple_count, tid + 1)
+  size_t tuple_id_start = ChunkRange(tuple_count, my_tid);
+  size_t tuple_id_end = ChunkRange(tuple_count, my_tid + 1);
   for (size_t tuple_id = tuple_id_start; tuple_id < tuple_id_end; tuple_id++) {
-    std::unique_ptr<ContainerTuple<LogicalTile>> cur_tuple(
-        new ContainerTuple<LogicalTile>(tile.get(), tuple_id)
-    );
+    std::unique_ptr<ContainerTuple<LogicalTile>> cur_tuple(new ContainerTuple<LogicalTile>(tile.get(), tuple_id));
 
     aggregator->Advance(cur_tuple.get());
     // note: aggregator will store unique keys in partitioned keys
@@ -258,37 +267,36 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
   // Phase 2
   ///////////////////////////////////////////////////////////////////
   // declare this thread's global hash table (a partition of the whole keyspace)
-  auto my_global_hash_table = global_hash_table[my_tid];
+  std::shared_ptr<HashAggregateMapType> my_global_hash_table = global_hash_tables_[my_tid];
 
   // for each list of unique keys found by worker threads
   for (size_t list_tid = 0; list_tid < num_threads_; list_tid++) {
-    auto keys = partitioned_keys[list_tid][my_tid];
-    for (auto key : keys)
-
+    std::shared_ptr<std::vector<AggKeyType>> keys = partitioned_keys_[list_tid][my_tid];
+    for (auto &key : *keys) {
       // if we haven't seen this key before
-      if (global_hash_table->count(key) == 0) {
+      if (my_global_hash_table->count(key) == 0) {
         AggregateList *new_entry = nullptr;
 
         // merge the local hash table entries
         for (size_t agg_tid = 0; agg_tid < num_threads_; agg_tid++) {
 
           // combine entries
-          auto local_entry = local_hash_tables[agg_tid]->find(key);
-          if (local_entry != local_hash_tables[agg_tid]->end())
+          auto local_entry = local_hash_tables_[agg_tid]->find(key);
+          if (local_entry != local_hash_tables_[agg_tid]->end()) {
             if (new_entry == nullptr) {
               new_entry = local_entry->second;
             } else {
               CombineEntries(new_entry, local_entry->second);
             }
-        	}
+          }
         }
-        my_global_hash_table[key] = new_entry;
+        my_global_hash_table->insert(key, new_entry);
       }
     }
   }
 
   if (!aggregator->Finalize()) {
-    delete output_tables_[my_tid];
+    output_tables_[my_tid].reset();
     output_tables_[my_tid] = nullptr;
   }
 }
@@ -298,6 +306,11 @@ bool AggregateExecutor::DExecuteParallel() {
   phase_completed_.store(false);
 
   const planner::AggregatePlan &node = GetPlanNode<planner::AggregatePlan>();
+
+  // Construct the output table
+  auto output_table_schema =
+      const_cast<catalog::Schema *>(node.GetOutputSchema());
+
   children_[0]->Execute();
   std::shared_ptr<LogicalTile> tile(children_[0]->GetOutput());
 
@@ -354,8 +367,8 @@ bool AggregateExecutor::DExecuteParallel() {
       } else {
         tuple->SetAllNulls();
       }
-      output_table_[0] = storage::TableFactory::GetTempTable(output_table_schema, false);
-  		UNUSED_ATTRIBUTE auto location = output_table_[0]->InsertTuple(tuple.get());
+      output_tables_[0].reset(storage::TableFactory::GetTempTable(output_table_schema, false));
+  		UNUSED_ATTRIBUTE auto location = output_tables_[0]->InsertTuple(tuple.get());
   		PELOTON_ASSERT(location.block != INVALID_OID);
   	} else {
       done = true;

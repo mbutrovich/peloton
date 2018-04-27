@@ -248,12 +248,13 @@ ParallelHashAggregator::ParallelHashAggregator(const planner::AggregatePlan *nod
                                executor::ExecutorContext *econtext,
                                size_t num_input_columns,
                                std::shared_ptr<HashAggregateMapType> _aggregates_map,
-                               std::shared_ptr<std::vector> **_partitioned_keys,
-                               size_t num_threads_)
+                               std::shared_ptr<std::vector<AggKeyType>> **_partitioned_keys,
+                               size_t _num_threads)
     : AbstractAggregator(node, output_table, econtext),
       num_input_columns(num_input_columns),
+      num_threads_(_num_threads),
   		aggregates_map(_aggregates_map),
-  		partitioned_keys{*_partitioned_keys}
+  		partitioned_keys(*_partitioned_keys) {}
 
 ParallelHashAggregator::~ParallelHashAggregator() {
   for (auto entry : *aggregates_map) {
@@ -279,11 +280,11 @@ bool ParallelHashAggregator::Advance(AbstractTuple *cur_tuple) {
   }
 
   auto map_itr = aggregates_map->find(group_by_key_values);
-
+  ValueVectorHasher value_hasher;
   // Group not found. Make a new entry in the hash for this new group.
   if (map_itr == aggregates_map->end()) {
-    size_t partition = ValueVectorHasher(group_by_key_values) % num_threads;
-    partitioned_keys[partition].push_back(group_by_key_values);
+    size_t partition = value_hasher(group_by_key_values) % num_threads_;
+    partitioned_keys[partition]->push_back(group_by_key_values);
 
     LOG_TRACE("Group-by key not found. Start a new group.");
     // Allocate new aggregate list
