@@ -255,13 +255,14 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
   LOG_TRACE("Finished processing logical tile");
   // End Phase 1 //////////////////////////////////////////////////
 
-	// Barrier to ensure all threads wait until phase 1 is complete
+  // Barrier to ensure all threads wait until phase 1 is complete
   int prev_arrivals = arrival_count_.fetch_add(1);
   if (prev_arrivals == num_threads_ - 1) {
-    phase_completed_.store(true);
+    arrival_count_.store(0);
+    phase_1_completed_.store(true);
   }
 
-  while(phase_completed_.load() == false);
+  while(phase_1_completed_.load() == false);
 
   //////////////////////////////////////////////////////////////////
   // Phase 2
@@ -299,11 +300,21 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
     output_tables_[my_tid].reset();
     output_tables_[my_tid] = nullptr;
   }
+
+  // Barrier to ensure all threads wait until phase 2 is complete
+  prev_arrivals = arrival_count_.fetch_add(1);
+  if (prev_arrivals == num_threads_ - 1) {
+    phase_2_completed_.store(true);
+  }
+
+  while(phase_2_completed_.load() == false);
+
 }
 
 bool AggregateExecutor::DExecuteParallel() {
   arrival_count_.store(0);
-  phase_completed_.store(false);
+  phase_1_completed_.store(false);
+  phase_2_completed_.store(false);
 
   const planner::AggregatePlan &node = GetPlanNode<planner::AggregatePlan>();
 

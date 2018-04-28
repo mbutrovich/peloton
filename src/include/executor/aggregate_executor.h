@@ -89,7 +89,8 @@ class AggregateExecutor : public AbstractExecutor {
   static size_t ChunkRange(size_t num_tuples, size_t tid);
   void CombineEntries(AggregateList *new_entry, AggregateList *local_entry);
   std::atomic<int> arrival_count_;
-  std::atomic<bool> phase_completed_;
+  std::atomic<bool> phase_1_completed_;
+  std::atomic<bool> phase_2_completed_;
 };
 
 }  // namespace executor
