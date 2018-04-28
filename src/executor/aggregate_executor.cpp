@@ -268,11 +268,11 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
   // Phase 2
   ///////////////////////////////////////////////////////////////////
   // declare this thread's global hash table (a partition of the whole keyspace)
-  std::shared_ptr<HashAggregateMapType> my_global_hash_table = global_hash_tables_[my_tid];
+  HashAggregateMapType *my_global_hash_table = global_hash_tables_[my_tid].get();
 
   // for each list of unique keys found by worker threads
   for (size_t list_tid = 0; list_tid < num_threads_; list_tid++) {
-    std::shared_ptr<std::vector<AggKeyType>> keys = partitioned_keys_[list_tid][my_tid];
+    std::vector<AggKeyType> *keys = partitioned_keys_[list_tid][my_tid].get();
     for (auto &key : *keys) {
       // if we haven't seen this key before
       if (my_global_hash_table->count(key) == 0) {

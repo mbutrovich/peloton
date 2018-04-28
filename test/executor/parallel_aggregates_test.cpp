@@ -42,7 +42,7 @@ class ParallelAggregatesTests : public PelotonTest {};
 
 constexpr size_t num_tuples = 50000;
 
-TEST_F(ParallelAggregatesTests, SequentialHashSumGroupByTest) {
+TEST_F(ParallelAggregatesTests, DISABLED_SequentialHashSumGroupByTest) {
   // SELECT b, SUM(c) from table GROUP BY b;
 
   // Create a table and wrap it in logical tiles
@@ -136,7 +136,7 @@ TEST_F(ParallelAggregatesTests, SequentialHashSumGroupByTest) {
 //  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec);
 }
 
-TEST_F(ParallelAggregatesTests, ParallelHashSumGroupByTest) {
+TEST_F(ParallelAggregatesTests, DISABLED_ParallelHashSumGroupByTest) {
   // SELECT b, SUM(c) from table GROUP BY b;
 //  const int tuple_count = TESTS_TUPLES_PER_TILEGROUP;
 
@@ -232,7 +232,7 @@ TEST_F(ParallelAggregatesTests, ParallelHashSumGroupByTest) {
 //  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec);
 }
 
-TEST_F(ParallelAggregatesTests, DISABLED_ParallelHashCountDistinctGroupByTest) {
+TEST_F(ParallelAggregatesTests, ParallelHashCountDistinctGroupByTest) {
   // SELECT a, COUNT(b), COUNT(DISTINCT b) from table group by a
   const int tuple_count = TESTS_TUPLES_PER_TILEGROUP;
 
