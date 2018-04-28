@@ -472,7 +472,7 @@ std::string TestingExecutorUtil::GetTileVectorInfo(
         if (col_id != 0) os << " ";
         os << tile->GetValue(tuple_id, col_id).GetInfo();
       }
-      os << ">";
+      os << ">\n";
     }
     first = false;
   }

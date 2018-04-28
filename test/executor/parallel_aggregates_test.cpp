@@ -40,28 +40,22 @@ namespace test {
 
 class ParallelAggregatesTests : public PelotonTest {};
 
-constexpr size_t num_tuples = 50000;
+constexpr size_t benchmark_num_tuples = 500000;
 
-TEST_F(ParallelAggregatesTests, SequentialHashSumGroupByTest) {
+TEST_F(ParallelAggregatesTests, SequentialHashSumGroupByBenchmark) {
   // SELECT b, SUM(c) from table GROUP BY b;
 
   // Create a table and wrap it in logical tiles
   auto& txn_manager = concurrency::TransactionManagerFactory::GetInstance();
   auto txn = txn_manager.BeginTransaction();
   std::unique_ptr<storage::DataTable> data_table(
-      TestingExecutorUtil::CreateTable(num_tuples, false));
-  TestingExecutorUtil::PopulateTable(data_table.get(), num_tuples, false,
+      TestingExecutorUtil::CreateTable(benchmark_num_tuples, false));
+  TestingExecutorUtil::PopulateTable(data_table.get(), benchmark_num_tuples, false,
                                    true, true, txn);
   txn_manager.CommitTransaction(txn);
 
   std::unique_ptr<executor::LogicalTile> source_logical_tile1(
       executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0)));
-
-//  std::vector<std::unique_ptr<executor::LogicalTile>> tile_vec;
-
-//  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0))));
-
-//  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec) << std::endl;
 
   // (1-5) Setup plan node
 
@@ -130,13 +124,9 @@ TEST_F(ParallelAggregatesTests, SequentialHashSumGroupByTest) {
 
   // Verify result
   std::unique_ptr<executor::LogicalTile> result_tile(executor.GetOutput());
-
-//  tile_vec.clear();
-//  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor.GetOutput()));
-//  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec);
 }
 
-TEST_F(ParallelAggregatesTests, ParallelHashSumGroupByTest) {
+TEST_F(ParallelAggregatesTests, ParallelHashSumGroupByBenchmark) {
   // SELECT b, SUM(c) from table GROUP BY b;
 //  const int tuple_count = TESTS_TUPLES_PER_TILEGROUP;
 
@@ -144,19 +134,13 @@ TEST_F(ParallelAggregatesTests, ParallelHashSumGroupByTest) {
   auto& txn_manager = concurrency::TransactionManagerFactory::GetInstance();
   auto txn = txn_manager.BeginTransaction();
   std::unique_ptr<storage::DataTable> data_table(
-      TestingExecutorUtil::CreateTable(num_tuples, false));
-  TestingExecutorUtil::PopulateTable(data_table.get(), num_tuples, false,
+      TestingExecutorUtil::CreateTable(benchmark_num_tuples, false));
+  TestingExecutorUtil::PopulateTable(data_table.get(), benchmark_num_tuples, false,
                                      true, true, txn);
   txn_manager.CommitTransaction(txn);
 
   std::unique_ptr<executor::LogicalTile> source_logical_tile1(
       executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0)));
-
-//  std::vector<std::unique_ptr<executor::LogicalTile>> tile_vec;
-
-//  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0))));
-
-//  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec) << std::endl;
 
   // (1-5) Setup plan node
 
@@ -226,13 +210,188 @@ TEST_F(ParallelAggregatesTests, ParallelHashSumGroupByTest) {
 
   // Verify result
   std::unique_ptr<executor::LogicalTile> result_tile(executor.GetOutput());
-
-//  tile_vec.clear();
-//  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor.GetOutput()));
-//  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec);
 }
 
-TEST_F(ParallelAggregatesTests, ParallelHashCountDistinctGroupByTest) {
+TEST_F(ParallelAggregatesTests, DISABLED_SequentialHashSumGroupByTest) {
+  // SELECT b, SUM(c) from table GROUP BY b;
+  const int tuple_count = TESTS_TUPLES_PER_TILEGROUP;
+
+  // Create a table and wrap it in logical tiles
+  auto& txn_manager = concurrency::TransactionManagerFactory::GetInstance();
+  auto txn = txn_manager.BeginTransaction();
+  std::unique_ptr<storage::DataTable> data_table(
+      TestingExecutorUtil::CreateTable(2*tuple_count, false));
+  TestingExecutorUtil::PopulateTable(data_table.get(), 2*tuple_count, false,
+                                     false, true, txn);
+  txn_manager.CommitTransaction(txn);
+
+  std::unique_ptr<executor::LogicalTile> source_logical_tile1(
+      executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0)));
+
+  std::vector<std::unique_ptr<executor::LogicalTile>> tile_vec;
+
+  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0))));
+
+  std::cout << std::endl << TestingExecutorUtil::GetTileVectorInfo(tile_vec) << std::endl;
+
+  // (1-5) Setup plan node
+
+  // 1) Set up group-by columns
+  std::vector<oid_t> group_by_columns = {1};
+
+  // 2) Set up project info
+  DirectMapList direct_map_list = {{0, {0, 1}}, {1, {1, 0}}};
+
+  std::unique_ptr<const planner::ProjectInfo> proj_info(
+      new planner::ProjectInfo(TargetList(), std::move(direct_map_list)));
+
+  // 3) Set up unique aggregates
+  std::vector<planner::AggregatePlan::AggTerm> agg_terms;
+  planner::AggregatePlan::AggTerm sumC(
+      ExpressionType::AGGREGATE_SUM,
+      expression::ExpressionUtil::TupleValueFactory(type::TypeId::DECIMAL, 0,
+                                                    2));
+  agg_terms.push_back(sumC);
+
+  // 4) Set up predicate (empty)
+  std::unique_ptr<const expression::AbstractExpression> predicate(nullptr);
+
+  // 5) Create output table schema
+  auto data_table_schema = data_table.get()->GetSchema();
+  std::vector<oid_t> set = {1, 2};
+  std::vector<catalog::Column> columns;
+  for (auto column_index : set) {
+    columns.push_back(data_table_schema->GetColumn(column_index));
+  }
+  std::shared_ptr<const catalog::Schema> output_table_schema(
+      new catalog::Schema(columns));
+
+  // OK) Create the plan node
+  planner::AggregatePlan node(std::move(proj_info), std::move(predicate),
+                              std::move(agg_terms), std::move(group_by_columns),
+                              output_table_schema, AggregateType::HASH);
+
+  // Create and set up executor
+  txn = txn_manager.BeginTransaction();
+  std::unique_ptr<executor::ExecutorContext> context(
+      new executor::ExecutorContext(txn));
+
+  executor::AggregateExecutor executor(&node, context.get());
+  MockExecutor child_executor;
+  executor.AddChild(&child_executor);
+
+  EXPECT_CALL(child_executor, DInit()).WillOnce(Return(true));
+
+  EXPECT_CALL(child_executor, DExecute())
+      .WillOnce(Return(true));
+
+  EXPECT_CALL(child_executor, GetOutput())
+      .WillOnce(Return(source_logical_tile1.release()));
+
+  EXPECT_TRUE(executor.Init());
+
+  EXPECT_TRUE(executor.Execute());
+
+  txn_manager.CommitTransaction(txn);
+
+  // Verify result
+//  std::unique_ptr<executor::LogicalTile> result_tile(executor.GetOutput());
+
+  tile_vec.clear();
+  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor.GetOutput()));
+  std::cout << std::endl << TestingExecutorUtil::GetTileVectorInfo(tile_vec) << std::endl;
+}
+
+TEST_F(ParallelAggregatesTests, DISABLED_ParallelHashSumGroupByTest) {
+  // SELECT b, SUM(c) from table GROUP BY b;
+  const int tuple_count = TESTS_TUPLES_PER_TILEGROUP;
+
+  // Create a table and wrap it in logical tiles
+  auto& txn_manager = concurrency::TransactionManagerFactory::GetInstance();
+  auto txn = txn_manager.BeginTransaction();
+  std::unique_ptr<storage::DataTable> data_table(
+      TestingExecutorUtil::CreateTable(2*tuple_count, false));
+  TestingExecutorUtil::PopulateTable(data_table.get(), 2*tuple_count, false,
+                                     false, true, txn);
+  txn_manager.CommitTransaction(txn);
+
+  std::unique_ptr<executor::LogicalTile> source_logical_tile1(
+      executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0)));
+
+  std::vector<std::unique_ptr<executor::LogicalTile>> tile_vec;
+
+  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0))));
+
+  std::cout << std::endl << TestingExecutorUtil::GetTileVectorInfo(tile_vec) << std::endl;
+
+  // (1-5) Setup plan node
+
+  // 1) Set up group-by columns
+  std::vector<oid_t> group_by_columns = {1};
+
+  // 2) Set up project info
+  DirectMapList direct_map_list = {{0, {0, 1}}, {1, {1, 0}}};
+
+  std::unique_ptr<const planner::ProjectInfo> proj_info(
+      new planner::ProjectInfo(TargetList(), std::move(direct_map_list)));
+
+  // 3) Set up unique aggregates
+  std::vector<planner::AggregatePlan::AggTerm> agg_terms;
+  planner::AggregatePlan::AggTerm sumC(
+      ExpressionType::AGGREGATE_SUM,
+      expression::ExpressionUtil::TupleValueFactory(type::TypeId::DECIMAL, 0,
+                                                    2));
+  agg_terms.push_back(sumC);
+
+  // 4) Set up predicate (empty)
+  std::unique_ptr<const expression::AbstractExpression> predicate(nullptr);
+
+  // 5) Create output table schema
+  auto data_table_schema = data_table.get()->GetSchema();
+  std::vector<oid_t> set = {1, 2};
+  std::vector<catalog::Column> columns;
+  for (auto column_index : set) {
+    columns.push_back(data_table_schema->GetColumn(column_index));
+  }
+  std::shared_ptr<const catalog::Schema> output_table_schema(
+      new catalog::Schema(columns));
+
+  // OK) Create the plan node
+  planner::AggregatePlan node(std::move(proj_info), std::move(predicate),
+                              std::move(agg_terms), std::move(group_by_columns),
+                              output_table_schema, AggregateType::PARALLEL_HASH);
+
+  // Create and set up executor
+  txn = txn_manager.BeginTransaction();
+  std::unique_ptr<executor::ExecutorContext> context(
+      new executor::ExecutorContext(txn));
+
+  executor::AggregateExecutor executor(&node, context.get());
+  MockExecutor child_executor;
+  executor.AddChild(&child_executor);
+
+  EXPECT_CALL(child_executor, DInit()).WillOnce(Return(true));
+
+  EXPECT_CALL(child_executor, DExecute())
+      .WillOnce(Return(true));
+
+  EXPECT_CALL(child_executor, GetOutput())
+      .WillOnce(Return(source_logical_tile1.release()));
+
+  EXPECT_TRUE(executor.Init());
+
+  tile_vec.clear();
+  while(executor.Execute()) {
+    tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor.GetOutput()));
+  }
+
+  txn_manager.CommitTransaction(txn);
+
+  // Verify result
+  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec);
+}
+
+TEST_F(ParallelAggregatesTests, DISABLED_ParallelHashCountDistinctGroupByTest) {
   // SELECT a, COUNT(b), COUNT(DISTINCT b) from table group by a
   const int tuple_count = TESTS_TUPLES_PER_TILEGROUP;
 
@@ -335,7 +494,7 @@ TEST_F(ParallelAggregatesTests, ParallelHashCountDistinctGroupByTest) {
   EXPECT_TRUE(cmp == CmpBool::CmpTrue);
 }
 
-TEST_F(ParallelAggregatesTests, ParallelHashMinMaxTest) {
+TEST_F(ParallelAggregatesTests, DISABLED_ParallelHashMinMaxTest) {
   // SELECT MIN(b), MAX(b), MIN(c), MAX(c) from table
   const int tuple_count = TESTS_TUPLES_PER_TILEGROUP;
 
