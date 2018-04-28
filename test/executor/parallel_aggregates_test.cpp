@@ -40,6 +40,8 @@ namespace test {
 
 class ParallelAggregatesTests : public PelotonTest {};
 
+constexpr size_t num_tuples = 500000;
+
 TEST_F(ParallelAggregatesTests, SequentialHashSumGroupByTest) {
   // SELECT b, SUM(c) from table GROUP BY b;
 
@@ -47,8 +49,8 @@ TEST_F(ParallelAggregatesTests, SequentialHashSumGroupByTest) {
   auto& txn_manager = concurrency::TransactionManagerFactory::GetInstance();
   auto txn = txn_manager.BeginTransaction();
   std::unique_ptr<storage::DataTable> data_table(
-      TestingExecutorUtil::CreateTable(500000, false));
-  TestingExecutorUtil::PopulateTable(data_table.get(), 500000, false,
+      TestingExecutorUtil::CreateTable(num_tuples, false));
+  TestingExecutorUtil::PopulateTable(data_table.get(), num_tuples, false,
                                    true, true, txn);
   txn_manager.CommitTransaction(txn);
 
@@ -143,16 +145,13 @@ TEST_F(ParallelAggregatesTests, ParallelHashSumGroupByTest) {
   auto& txn_manager = concurrency::TransactionManagerFactory::GetInstance();
   auto txn = txn_manager.BeginTransaction();
   std::unique_ptr<storage::DataTable> data_table(
-      TestingExecutorUtil::CreateTable(500000, false));
-  TestingExecutorUtil::PopulateTable(data_table.get(), 500000, false,
+      TestingExecutorUtil::CreateTable(num_tuples, false));
+  TestingExecutorUtil::PopulateTable(data_table.get(), num_tuples, false,
                                      true, true, txn);
   txn_manager.CommitTransaction(txn);
 
   std::unique_ptr<executor::LogicalTile> source_logical_tile1(
       executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0)));
-//
-//  std::unique_ptr<executor::LogicalTile> source_logical_tile2(
-//      executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(1)));
 //
 //  std::vector<std::unique_ptr<executor::LogicalTile>> tile_vec;
 
