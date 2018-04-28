@@ -42,24 +42,20 @@ class ParallelAggregatesTests : public PelotonTest {};
 
 TEST_F(ParallelAggregatesTests, SequentialHashSumGroupByTest) {
   // SELECT b, SUM(c) from table GROUP BY b;
-//  const int tuple_count = TESTS_TUPLES_PER_TILEGROUP;
 
   // Create a table and wrap it in logical tiles
   auto& txn_manager = concurrency::TransactionManagerFactory::GetInstance();
   auto txn = txn_manager.BeginTransaction();
   std::unique_ptr<storage::DataTable> data_table(
-      TestingExecutorUtil::CreateTable(1000, false));
-  TestingExecutorUtil::PopulateTable(data_table.get(), 1000, false,
+      TestingExecutorUtil::CreateTable(500000, false));
+  TestingExecutorUtil::PopulateTable(data_table.get(), 500000, false,
                                    true, true, txn);
   txn_manager.CommitTransaction(txn);
 
   std::unique_ptr<executor::LogicalTile> source_logical_tile1(
       executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0)));
 
-  std::unique_ptr<executor::LogicalTile> source_logical_tile2(
-      executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(1)));
-
-  std::vector<std::unique_ptr<executor::LogicalTile>> tile_vec;
+//  std::vector<std::unique_ptr<executor::LogicalTile>> tile_vec;
 
 //  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0))));
 //  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(1))));
@@ -112,31 +108,29 @@ TEST_F(ParallelAggregatesTests, SequentialHashSumGroupByTest) {
   MockExecutor child_executor;
   executor.AddChild(&child_executor);
 
-//  EXPECT_CALL(child_executor, DInit()).WillOnce(Return(true));
-//
-//  EXPECT_CALL(child_executor, DExecute())
-//      .WillOnce(Return(true))
+  EXPECT_CALL(child_executor, DInit()).WillOnce(Return(true));
+
+  EXPECT_CALL(child_executor, DExecute())
+      .WillOnce(Return(true));
 //      .WillOnce(Return(true))
 //      .WillOnce(Return(false));
-//
-//  EXPECT_CALL(child_executor, GetOutput())
-//      .WillOnce(Return(source_logical_tile1.release()))
+
+  EXPECT_CALL(child_executor, GetOutput())
+      .WillOnce(Return(source_logical_tile1.release()));
 //      .WillOnce(Return(source_logical_tile2.release()));
-//
-//  EXPECT_TRUE(executor.Init());
-//
-//  EXPECT_TRUE(executor.Execute());
+
+  EXPECT_TRUE(executor.Init());
+
+  EXPECT_TRUE(executor.Execute());
 
   txn_manager.CommitTransaction(txn);
 
   // Verify result
-//  std::unique_ptr<executor::LogicalTile> result_tile(executor.GetOutput());
+  std::unique_ptr<executor::LogicalTile> result_tile(executor.GetOutput());
 
-  tile_vec.clear();
-  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor.GetOutput()));
-  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec);
-  // FIXME This should pass
-  //  EXPECT_GE(3, result_tile->GetTupleCount());
+//  tile_vec.clear();
+//  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor.GetOutput()));
+//  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec);
 }
 
 TEST_F(ParallelAggregatesTests, ParallelHashSumGroupByTest) {
@@ -147,18 +141,18 @@ TEST_F(ParallelAggregatesTests, ParallelHashSumGroupByTest) {
   auto& txn_manager = concurrency::TransactionManagerFactory::GetInstance();
   auto txn = txn_manager.BeginTransaction();
   std::unique_ptr<storage::DataTable> data_table(
-      TestingExecutorUtil::CreateTable(1000, false));
-  TestingExecutorUtil::PopulateTable(data_table.get(), 1000, false,
+      TestingExecutorUtil::CreateTable(500000, false));
+  TestingExecutorUtil::PopulateTable(data_table.get(), 500000, false,
                                      true, true, txn);
   txn_manager.CommitTransaction(txn);
 
   std::unique_ptr<executor::LogicalTile> source_logical_tile1(
       executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0)));
-
-  std::unique_ptr<executor::LogicalTile> source_logical_tile2(
-      executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(1)));
-
-  std::vector<std::unique_ptr<executor::LogicalTile>> tile_vec;
+//
+//  std::unique_ptr<executor::LogicalTile> source_logical_tile2(
+//      executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(1)));
+//
+//  std::vector<std::unique_ptr<executor::LogicalTile>> tile_vec;
 
 //  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0))));
 //  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(1))));
@@ -211,31 +205,26 @@ TEST_F(ParallelAggregatesTests, ParallelHashSumGroupByTest) {
   MockExecutor child_executor;
   executor.AddChild(&child_executor);
 
-//  EXPECT_CALL(child_executor, DInit()).WillOnce(Return(true));
-//
-//  EXPECT_CALL(child_executor, DExecute())
-//      .WillOnce(Return(true))
-//      .WillOnce(Return(true))
-//      .WillOnce(Return(false));
-//
-//  EXPECT_CALL(child_executor, GetOutput())
-//      .WillOnce(Return(source_logical_tile1.release()))
-//      .WillOnce(Return(source_logical_tile2.release()));
+  EXPECT_CALL(child_executor, DInit()).WillOnce(Return(true));
 
-//  EXPECT_TRUE(executor.Init());
+  EXPECT_CALL(child_executor, DExecute())
+      .WillOnce(Return(true));
 
-//  EXPECT_TRUE(executor.Execute());
+  EXPECT_CALL(child_executor, GetOutput())
+      .WillOnce(Return(source_logical_tile1.release()));
+
+  EXPECT_TRUE(executor.Init());
+
+  EXPECT_TRUE(executor.Execute());
 
   txn_manager.CommitTransaction(txn);
 
   // Verify result
-//  std::unique_ptr<executor::LogicalTile> result_tile(executor.GetOutput());
+  std::unique_ptr<executor::LogicalTile> result_tile(executor.GetOutput());
 
-  tile_vec.clear();
-  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor.GetOutput()));
-  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec);
-  // FIXME This should pass
-  //  EXPECT_GE(3, result_tile->GetTupleCount());
+//  tile_vec.clear();
+//  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor.GetOutput()));
+//  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec);
 }
 
 }  // namespace test

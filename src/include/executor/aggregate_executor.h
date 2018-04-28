@@ -78,7 +78,7 @@ class AggregateExecutor : public AbstractExecutor {
   storage::AbstractTable *output_table = nullptr;
 
  private:
-  static constexpr size_t num_threads_ = 4;
+  static constexpr size_t num_threads_ = 8;
   std::thread threads_[num_threads_];
   std::shared_ptr<HashAggregateMapType> local_hash_tables_[num_threads_];
   std::shared_ptr<HashAggregateMapType> global_hash_tables_[num_threads_];

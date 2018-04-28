@@ -224,6 +224,7 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
   // Phase 1 //////////////////////////////////////////////////
   output_tables_[my_tid].reset(storage::TableFactory::GetTempTable(output_table_schema, false));
   local_hash_tables_[my_tid] = std::make_shared<HashAggregateMapType>();
+  global_hash_tables_[my_tid] = std::make_shared<HashAggregateMapType>();
 
   for (size_t partition = 0; partition < num_threads_; partition++) {
     partitioned_keys_[my_tid][partition] = std::make_shared<std::vector<AggKeyType>>();
