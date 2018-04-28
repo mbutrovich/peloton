@@ -54,6 +54,7 @@ class ExecutorContext {
   codegen::QueryParameters parameters_;
   // Temporary memory pool for allocations done during execution
   std::unique_ptr<type::EphemeralPool> pool_;
+  common::synchronization::SpinLatch econtext_lock_;
 };
 
 }  // namespace executor

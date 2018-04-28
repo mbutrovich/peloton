@@ -35,10 +35,11 @@ codegen::QueryParameters &ExecutorContext::GetParams() { return parameters_; }
 
 type::EphemeralPool *ExecutorContext::GetPool() {
   // construct pool if needed
+  econtext_lock_.Lock();
   if (pool_ == nullptr) {
     pool_.reset(new type::EphemeralPool());
   }
-
+  econtext_lock_.Unlock();
   // return pool
   return pool_.get();
 }
