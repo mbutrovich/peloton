@@ -60,8 +60,7 @@ TEST_F(ParallelAggregatesTests, SequentialHashSumGroupByTest) {
 //  std::vector<std::unique_ptr<executor::LogicalTile>> tile_vec;
 
 //  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0))));
-//  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(1))));
-//
+
 //  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec) << std::endl;
 
   // (1-5) Setup plan node
@@ -152,12 +151,11 @@ TEST_F(ParallelAggregatesTests, ParallelHashSumGroupByTest) {
 
   std::unique_ptr<executor::LogicalTile> source_logical_tile1(
       executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0)));
-//
+
 //  std::vector<std::unique_ptr<executor::LogicalTile>> tile_vec;
 
 //  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(0))));
-//  tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor::LogicalTileFactory::WrapTileGroup(data_table->GetTileGroup(1))));
-//
+
 //  std::cout << TestingExecutorUtil::GetTileVectorInfo(tile_vec) << std::endl;
 
   // (1-5) Setup plan node
