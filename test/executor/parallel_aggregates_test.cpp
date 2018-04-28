@@ -14,6 +14,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <chrono>
 
 #include "executor/testing_executor_util.h"
 #include "common/harness.h"
@@ -29,7 +30,6 @@
 #include "planner/abstract_plan.h"
 #include "planner/aggregate_plan.h"
 #include "storage/data_table.h"
-
 #include "executor/mock_executor.h"
 
 using ::testing::NotNull;
@@ -112,18 +112,20 @@ TEST_F(ParallelAggregatesTests, SequentialHashSumGroupByTest) {
 
   EXPECT_CALL(child_executor, DExecute())
       .WillOnce(Return(true));
-//      .WillOnce(Return(true))
-//      .WillOnce(Return(false));
 
   EXPECT_CALL(child_executor, GetOutput())
       .WillOnce(Return(source_logical_tile1.release()));
-//      .WillOnce(Return(source_logical_tile2.release()));
 
+  auto start = std::chrono::system_clock::now();
   EXPECT_TRUE(executor.Init());
 
   EXPECT_TRUE(executor.Execute());
+  auto end = std::chrono::system_clock::now();
 
   txn_manager.CommitTransaction(txn);
+
+  std::chrono::duration<double> elapsed_seconds = end-start;
+  std::cout << "sequential aggregation elapsed time: " << elapsed_seconds.count() << "s\n";
 
   // Verify result
   std::unique_ptr<executor::LogicalTile> result_tile(executor.GetOutput());
@@ -213,11 +215,17 @@ TEST_F(ParallelAggregatesTests, ParallelHashSumGroupByTest) {
   EXPECT_CALL(child_executor, GetOutput())
       .WillOnce(Return(source_logical_tile1.release()));
 
+
+  auto start = std::chrono::system_clock::now();
   EXPECT_TRUE(executor.Init());
 
   EXPECT_TRUE(executor.Execute());
+  auto end = std::chrono::system_clock::now();
 
   txn_manager.CommitTransaction(txn);
+
+  std::chrono::duration<double> elapsed_seconds = end-start;
+  std::cout << "parallel aggregation elapsed time: " << elapsed_seconds.count() << "s\n";
 
   // Verify result
   std::unique_ptr<executor::LogicalTile> result_tile(executor.GetOutput());
