@@ -415,6 +415,7 @@ class ParallelHashAggregator : public AbstractAggregator {
 
   ~ParallelHashAggregator();
 
+  std::shared_ptr<HashAggregateMapType> aggregates_map;
  private:
   const size_t num_input_columns;
   const size_t num_threads_;
@@ -423,7 +424,7 @@ class ParallelHashAggregator : public AbstractAggregator {
   std::vector<type::Value> group_by_key_values;
 
   /** @brief Hash table */
-  std::shared_ptr<HashAggregateMapType> aggregates_map;
+//  std::shared_ptr<HashAggregateMapType> aggregates_map;
 
   std::shared_ptr<std::vector<AggKeyType>> *partitioned_keys;
 };

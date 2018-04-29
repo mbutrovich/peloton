@@ -213,7 +213,14 @@ void AggregateExecutor::CombineEntries(AggregateList *new_entry,
   // Grab info from plan node
   const planner::AggregatePlan &node = GetPlanNode<planner::AggregatePlan>();
   for (size_t i=0; i < node.GetUniqueAggTerms().size(); i++) {
-    new_entry->aggregates[i]->DCombine(local_entry->aggregates[i]);
+    if (node.GetUniqueAggTerms()[i].distinct) {
+      for (auto &item : local_entry->aggregates[i]->distinct_set_) {
+        new_entry->aggregates[i]->distinct_set_.insert(item);
+      }
+    }
+    else {
+      new_entry->aggregates[i]->DCombine(local_entry->aggregates[i]);
+    }
   }
 }
 
@@ -238,7 +245,7 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
   }
 
   // create a local hash table of group by keys
-  std::unique_ptr<AbstractAggregator> aggregator(
+  std::unique_ptr<ParallelHashAggregator> aggregator(
     new ParallelHashAggregator(&node,
                                output_tables_[my_tid].get(),
                                executor_context_,
@@ -314,6 +321,8 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
 
   // Phase: Materialization
   start = std::chrono::system_clock::now();
+
+  aggregator->aggregates_map.swap(global_hash_tables_[my_tid]);
 
   if (!aggregator->Finalize()) {
     output_tables_[my_tid].reset();
