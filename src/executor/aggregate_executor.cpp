@@ -108,6 +108,7 @@ bool AggregateExecutor::DExecute() {
 }
 
 bool AggregateExecutor::DExecuteSequential() {
+  auto start = std::chrono::system_clock::now();
   // Grab info from plan node
   const planner::AggregatePlan &node = GetPlanNode<planner::AggregatePlan>();
 
@@ -129,7 +130,9 @@ bool AggregateExecutor::DExecuteSequential() {
     }
   }
   LOG_TRACE("Finished processing logical tile");
+  timers_[0][0] = std::chrono::system_clock::now() - start;
 
+  start = std::chrono::system_clock::now();
   LOG_TRACE("Finalizing..");
   if (!aggregator.get() || !aggregator->Finalize()) {
     // If there's no tuples and no group-by, count() aggregations should return
@@ -191,6 +194,8 @@ bool AggregateExecutor::DExecuteSequential() {
   SetOutput(result[result_itr]);
   result_itr++;
 
+  timers_[1][0] = std::chrono::system_clock::now() - start;
+
   return true;
 }
 
@@ -214,6 +219,8 @@ void AggregateExecutor::CombineEntries(AggregateList *new_entry,
 
 
 void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<LogicalTile> tile) {
+
+  auto start = std::chrono::system_clock::now();
   // Grab info from plan node
   const planner::AggregatePlan &node = GetPlanNode<planner::AggregatePlan>();
 
@@ -253,9 +260,13 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
     // note: aggregator will store unique keys in partitioned keys
   }
   LOG_TRACE("Finished processing logical tile");
+
+  timers_[0][my_tid] = std::chrono::system_clock::now() - start;
   // End Phase 1 //////////////////////////////////////////////////
 
-  // Barrier to ensure all threads wait until phase 1 is complete
+  // Barrier 1: to ensure all threads wait until phase 1 is complete
+  start = std::chrono::system_clock::now();
+
   int prev_arrivals = arrival_count_.fetch_add(1);
   if (prev_arrivals == num_threads_ - 1) {
     arrival_count_.store(0);
@@ -263,10 +274,13 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
   }
 
   while(phase_1_completed_.load() == false);
+  timers_[1][my_tid] = std::chrono::system_clock::now() - start;
 
   //////////////////////////////////////////////////////////////////
   // Phase 2
   ///////////////////////////////////////////////////////////////////
+  start = std::chrono::system_clock::now();
+
   // declare this thread's global hash table (a partition of the whole keyspace)
   HashAggregateMapType *my_global_hash_table = global_hash_tables_[my_tid].get();
 
@@ -295,20 +309,28 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
       }
     }
   }
+  timers_[2][my_tid] = std::chrono::system_clock::now() - start;
+
+
+  // Phase: Materialization
+  start = std::chrono::system_clock::now();
 
   if (!aggregator->Finalize()) {
     output_tables_[my_tid].reset();
     output_tables_[my_tid] = nullptr;
   }
+  timers_[3][my_tid] = std::chrono::system_clock::now() - start;
 
   // Barrier to ensure all threads wait until phase 2 is complete
+  start = std::chrono::system_clock::now();
+
   prev_arrivals = arrival_count_.fetch_add(1);
   if (prev_arrivals == num_threads_ - 1) {
     phase_2_completed_.store(true);
   }
 
   while(phase_2_completed_.load() == false);
-
+  timers_[4][my_tid] = std::chrono::system_clock::now() - start;
 }
 
 bool AggregateExecutor::DExecuteParallel() {
@@ -325,12 +347,12 @@ bool AggregateExecutor::DExecuteParallel() {
   children_[0]->Execute();
   std::shared_ptr<LogicalTile> tile(children_[0]->GetOutput());
 
-  // Initialize num_threads aggregators
+  // Launch num_threads aggregators to perform the aggregate in parallel
   for (size_t tid = 0; tid < num_threads_; tid++) {
     threads_[tid] = std::thread(&AggregateExecutor::ParallelAggregatorThread, this, tid, tile);
   }
 
-  // join all threads
+  // wait for all threads to complete their work
   for (size_t tid = 0; tid < num_threads_; tid++) {
     threads_[tid].join();
   }

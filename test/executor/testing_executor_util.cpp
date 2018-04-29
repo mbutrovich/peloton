@@ -37,12 +37,113 @@
 #include "type/value.h"
 #include "type/value_factory.h"
 
+#include <algorithm>
+#include <cmath>
+#include <random>
+
 using ::testing::IsNull;
 using ::testing::NotNull;
 using ::testing::Return;
 
 namespace peloton {
 namespace test {
+
+/** Zipf-like random distribution.
+ *
+ * "Rejection-inversion to generate variates from monotone discrete
+ * distributions", Wolfgang Hörmann and Gerhard Derflinger
+ * ACM TOMACS 6.3 (1996): 169-184
+ */
+template<class IntType = unsigned long, class RealType = double>
+class zipf_distribution
+{
+ public:
+  typedef RealType input_type;
+  typedef IntType result_type;
+
+  static_assert(std::numeric_limits<IntType>::is_integer, "");
+  static_assert(!std::numeric_limits<RealType>::is_integer, "");
+
+  zipf_distribution(const IntType n=std::numeric_limits<IntType>::max(),
+                    const RealType q=1.0)
+      : n(n)
+      , q(q)
+      , H_x1(H(1.5) - 1.0)
+      , H_n(H(n + 0.5))
+      , dist(H_x1, H_n)
+  {}
+
+  IntType operator()(std::mt19937& rng)
+  {
+    while (true) {
+      const RealType u = dist(rng);
+      const RealType x = H_inv(u);
+      const IntType  k = clamp<IntType>(std::round(x), 1, n);
+      if (u >= H(k + 0.5) - h(k)) {
+        return k;
+      }
+    }
+  }
+
+ private:
+  /** Clamp x to [min, max]. */
+  template<typename T>
+  static constexpr T clamp(const T x, const T min, const T max)
+  {
+    return std::max(min, std::min(max, x));
+  }
+
+  /** exp(x) - 1 / x */
+  static double
+  expxm1bx(const double x)
+  {
+    return (std::abs(x) > epsilon)
+           ? std::expm1(x) / x
+           : (1.0 + x/2.0 * (1.0 + x/3.0 * (1.0 + x/4.0)));
+  }
+
+  /** H(x) = log(x) if q == 1, (x^(1-q) - 1)/(1 - q) otherwise.
+   * H(x) is an integral of h(x).
+   *
+   * Note the numerator is one less than in the paper order to work with all
+   * positive q.
+   */
+  const RealType H(const RealType x)
+  {
+    const RealType log_x = std::log(x);
+    return expxm1bx((1.0 - q) * log_x) * log_x;
+  }
+
+  /** log(1 + x) / x */
+  static RealType
+  log1pxbx(const RealType x)
+  {
+    return (std::abs(x) > epsilon)
+           ? std::log1p(x) / x
+           : 1.0 - x * ((1/2.0) - x * ((1/3.0) - x * (1/4.0)));
+  }
+
+  /** The inverse function of H(x) */
+  const RealType H_inv(const RealType x)
+  {
+    const RealType t = std::max(-1.0, x * (1.0 - q));
+    return std::exp(log1pxbx(t) * x);
+  }
+
+  /** That hat function h(x) = 1 / (x ^ q) */
+  const RealType h(const RealType x)
+  {
+    return std::exp(-q * std::log(x));
+  }
+
+  static constexpr RealType epsilon = 1e-8;
+
+  IntType                                  n;     ///< Number of elements
+  RealType                                 q;     ///< Exponent
+  RealType                                 H_x1;  ///< H(x_1)
+  RealType                                 H_n;   ///< H(n)
+  std::uniform_real_distribution<RealType> dist;  ///< [H(x_1), H(n)]
+};
 
 storage::Database *TestingExecutorUtil::InitializeDatabase(
     const std::string &db_name) {
@@ -232,6 +333,64 @@ void TestingExecutorUtil::PopulateTable(storage::DataTable *table, int num_rows,
     auto string_value =
         type::ValueFactory::GetVarcharValue(std::to_string(PopulatedValue(
             random ? std::rand() % (num_rows / 3) : populate_value, 3)));
+    tuple.SetValue(3, string_value, testing_pool);
+
+    ItemPointer *index_entry_ptr = nullptr;
+    ItemPointer tuple_slot_id =
+        table->InsertTuple(&tuple, current_txn, &index_entry_ptr);
+    PELOTON_ASSERT(tuple_slot_id.block != INVALID_OID);
+    PELOTON_ASSERT(tuple_slot_id.offset != INVALID_OID);
+
+    auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
+    txn_manager.PerformInsert(current_txn, tuple_slot_id, index_entry_ptr);
+  }
+}
+
+/**
+ * @brief Populates the table
+ * @param table Table to populate with values.
+ * @param num_rows Number of tuples to insert.
+ */
+void TestingExecutorUtil::PopulateTableZipf(storage::DataTable *table,
+                                            int num_rows,
+                                            double q,
+                                            int32_t group_range,
+                                            concurrency::TransactionContext *current_txn) {
+
+  zipf_distribution<int32_t, double> zipf(group_range, q);
+  std::mt19937 rng(std::time(nullptr));
+
+  const catalog::Schema *schema = table->GetSchema();
+
+  // Ensure that the tile group is as expected.
+  PELOTON_ASSERT(schema->GetColumnCount() == 4);
+
+  // Insert tuples into tile_group.
+  const bool allocate = true;
+  auto testing_pool = TestingHarness::GetInstance().GetTestingPool();
+  for (int rowid = 0; rowid < num_rows; rowid++) {
+    int populate_value = rowid;
+
+    storage::Tuple tuple(schema, allocate);
+
+
+    // First column is unique in this case
+    tuple.SetValue(0,
+                   type::ValueFactory::GetIntegerValue(
+                       PopulatedValue(populate_value, 0)), testing_pool);
+
+    // this is our zipfian group by key
+    tuple.SetValue(1, type::ValueFactory::GetIntegerValue(zipf(rng)), testing_pool);
+
+    // third column, decimal, unique
+    tuple.SetValue(2,
+                   type::ValueFactory::GetDecimalValue(PopulatedValue(populate_value, 2)),
+                   testing_pool);
+
+    // fourth col, string
+    auto string_value =
+        type::ValueFactory::GetVarcharValue(
+            std::to_string(PopulatedValue(populate_value, 3)));
     tuple.SetValue(3, string_value, testing_pool);
 
     ItemPointer *index_entry_ptr = nullptr;

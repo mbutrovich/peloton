@@ -82,7 +82,14 @@ class TestingExecutorUtil {
                             bool mutate, bool random, bool group_by,
                             concurrency::TransactionContext *current_txn);
 
-  static void PopulateTiles(std::shared_ptr<storage::TileGroup> tile_group,
+  static void PopulateTableZipf(storage::DataTable *table,
+                                int num_rows,
+                                double q,
+                                int32_t group_range,
+                                concurrency::TransactionContext *current_txn);
+
+
+    static void PopulateTiles(std::shared_ptr<storage::TileGroup> tile_group,
                             int num_rows);
 
   static catalog::Column GetColumnInfo(int index);

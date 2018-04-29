@@ -16,6 +16,7 @@
 #include "executor/aggregator.h"
 
 #include <vector>
+#include <chrono>
 
 namespace peloton {
 
@@ -53,6 +54,11 @@ class AggregateExecutor : public AbstractExecutor {
 
   ~AggregateExecutor();
 
+
+  static constexpr size_t num_threads_ = 8;
+  static constexpr size_t num_phases_ = 5;
+  std::chrono::duration<double> timers_[num_phases_][num_threads_];
+
  protected:
   bool DInit();
 
@@ -78,12 +84,12 @@ class AggregateExecutor : public AbstractExecutor {
   storage::AbstractTable *output_table = nullptr;
 
  private:
-  static constexpr size_t num_threads_ = 8;
   std::thread threads_[num_threads_];
   std::shared_ptr<HashAggregateMapType> local_hash_tables_[num_threads_];
   std::shared_ptr<HashAggregateMapType> global_hash_tables_[num_threads_];
   std::shared_ptr<std::vector<AggKeyType>> partitioned_keys_[num_threads_][num_threads_];
   std::shared_ptr<storage::AbstractTable> output_tables_[num_threads_];
+
 
   void ParallelAggregatorThread(size_t tid, std::shared_ptr<LogicalTile> tile);
   static size_t ChunkRange(size_t num_tuples, size_t tid);
