@@ -89,6 +89,15 @@ class TestingExecutorUtil {
                                 concurrency::TransactionContext *current_txn);
 
 
+  static void PopulateTableCustom(storage::DataTable *table,
+                                                int num_rows,
+                                                bool uniform,
+                                                int constant,
+                                                double q,
+                                                int group_range,
+                                                concurrency::TransactionContext *current_txn);
+
+
     static void PopulateTiles(std::shared_ptr<storage::TileGroup> tile_group,
                             int num_rows);
 

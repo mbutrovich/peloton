@@ -351,10 +351,12 @@ void TestingExecutorUtil::PopulateTable(storage::DataTable *table, int num_rows,
  * @param table Table to populate with values.
  * @param num_rows Number of tuples to insert.
  */
-void TestingExecutorUtil::PopulateTableZipf(storage::DataTable *table,
+void TestingExecutorUtil::PopulateTableCustom(storage::DataTable *table,
                                             int num_rows,
+                                            bool uniform,
+                                            int constant,
                                             double q,
-                                            int32_t group_range,
+                                            int group_range,
                                             concurrency::TransactionContext *current_txn) {
 
   zipf_distribution<int32_t, double> zipf(group_range, q);
@@ -376,11 +378,20 @@ void TestingExecutorUtil::PopulateTableZipf(storage::DataTable *table,
 
     // First column is unique in this case
     tuple.SetValue(0,
-                   type::ValueFactory::GetIntegerValue(
-                       PopulatedValue(populate_value, 0)), testing_pool);
+                   type::ValueFactory::GetIntegerValue(rowid), testing_pool);
 
-    // this is our zipfian group by key
-    tuple.SetValue(1, type::ValueFactory::GetIntegerValue(zipf(rng)), testing_pool);
+    // this is our group by key
+    if (uniform) {
+      if (num_rows != group_range)
+        tuple.SetValue(1, type::ValueFactory::GetIntegerValue(rowid % group_range), testing_pool);
+      else
+        tuple.SetValue(1, type::ValueFactory::GetIntegerValue(rowid), testing_pool);
+    } else if (constant) {
+      tuple.SetValue(1, type::ValueFactory::GetIntegerValue(constant), testing_pool);
+    } else {
+      tuple.SetValue(1, type::ValueFactory::GetIntegerValue(zipf(rng)), testing_pool);
+    }
+
 
     // third column, decimal, unique
     tuple.SetValue(2,
