@@ -46,10 +46,11 @@ namespace test {
 class ParallelAggregatesTests : public PelotonTest {};
 
 // Benchmark Parameters
-constexpr size_t benchmark_num_tuples = 1000000;
+constexpr size_t benchmark_num_tuples = 10000000;
 
 //bool benchmark_sequential = true;
 bool benchmark_sequential = false;
+//bool benchmark_parallel = false;
 bool benchmark_parallel = true;
 
 bool print_result_table = false;
@@ -58,16 +59,16 @@ bool print_time_components = true;
 // Scenarios
 
 // zipf with low q
-bool uniform = false;
-int constant = 0;
-double q = 1.2;
-int group_range = 10000000;
+//bool uniform = false;
+//int constant = 0;
+//double q = 1.2;
+//int group_range = 10000000;
 
 // uniform across groups
-//bool uniform = true;
-//int constant = 0;
-//double q = 0.0;
-//int group_range = 1000000;
+bool uniform = true;
+int constant = 0;
+double q = 0.0;
+int group_range = 10000000;
 
 // uniform across distinct groups
 //bool uniform = true;

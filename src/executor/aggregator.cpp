@@ -285,15 +285,15 @@ bool ParallelHashAggregator::Advance(AbstractTuple *cur_tuple) {
 
 
     // NAIVE DISTRIBUTION VIA UNIFORM PARTITIONING FOM TO MIN TO MAX //////
-    float min_val = 0.0f;
-    float max_val = 10000001.0f; // 1 greater than the max possible value
-    float val = static_cast<float>(cur_tuple->GetValue(node->GetGroupbyColIds()[0]).GetAs<int32_t>());
-    size_t partition = (size_t)(((val-min_val)/max_val) * num_threads_);
+//    float min_val = 0.0f;
+//    float max_val = 10000001.0f; // 1 greater than the max possible value
+//    float val = static_cast<float>(cur_tuple->GetValue(node->GetGroupbyColIds()[0]).GetAs<int32_t>());
+//    size_t partition = (size_t)(((val-min_val)/max_val) * num_threads_);
     ////////////////////////////////////////////////////////////////////////
 
     // SMART DISTRIBUTION VIA HASHING ////////////////////////////////////
-//     ValueVectorHasher value_hasher;
-//     size_t partition = value_hasher(group_by_key_values) % num_threads_;
+     ValueVectorHasher value_hasher;
+     size_t partition = value_hasher(group_by_key_values) % num_threads_;
     //////////////////////////////////////////////////////////////////////
 
     partitioned_keys[partition]->push_back(group_by_key_values);
