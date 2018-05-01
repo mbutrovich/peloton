@@ -362,6 +362,9 @@ void TestingExecutorUtil::PopulateTableCustom(storage::DataTable *table,
   zipf_distribution<int32_t, double> zipf(group_range, q);
   std::mt19937 rng(std::time(nullptr));
 
+  std::default_random_engine uniform_rng (15721);
+  std::uniform_int_distribution<int> uniform_dist(1, group_range);
+
   const catalog::Schema *schema = table->GetSchema();
 
   // Ensure that the tile group is as expected.
@@ -382,10 +385,12 @@ void TestingExecutorUtil::PopulateTableCustom(storage::DataTable *table,
 
     // this is our group by key
     if (uniform) {
-      if (num_rows != group_range)
-        tuple.SetValue(1, type::ValueFactory::GetIntegerValue(rowid % group_range), testing_pool);
-      else
+      if (num_rows != group_range) {
+        tuple.SetValue(1, type::ValueFactory::GetIntegerValue(uniform_dist(uniform_rng)), testing_pool);
+//        tuple.SetValue(1, type::ValueFactory::GetIntegerValue(rowid % group_range), testing_pool);
+      } else {
         tuple.SetValue(1, type::ValueFactory::GetIntegerValue(rowid), testing_pool);
+      }
     } else if (constant) {
       tuple.SetValue(1, type::ValueFactory::GetIntegerValue(constant), testing_pool);
     } else {

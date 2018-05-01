@@ -46,10 +46,11 @@ namespace test {
 class ParallelAggregatesTests : public PelotonTest {};
 
 // Benchmark Parameters
-constexpr size_t benchmark_num_tuples = 1000000;
+constexpr size_t benchmark_num_tuples = 100000;
 
 //bool benchmark_sequential = true;
 bool benchmark_sequential = false;
+
 //bool benchmark_parallel = false;
 bool benchmark_parallel = true;
 
@@ -160,6 +161,21 @@ void PrintRuntimeInfoSequential(executor::AggregateExecutor &executor) {
 //  val = 100.0;
 //  partition = (size_t)(((val-min_val)/max_val) * num_threads_);
 //  EXPECT_EQ(9, partition);
+//}
+
+//TEST_F(ParallelAggregatesTests, UniformDistTest) {
+//  std::set<int> vals;
+//  int group_range = 3;
+//  std::default_random_engine rng(15721);
+//  std::uniform_int_distribution<int> uniform_dist(1, group_range);
+//
+//  for (int i=0; i < group_range; i++) {
+//    int val = uniform_dist(rng);
+////    std::cout << val << " ";
+//    vals.insert(val);
+//  }
+//  std::cout << std::endl;
+//  std::cout << vals.size() << std::endl;
 //}
 
 TEST_F(ParallelAggregatesTests, HashSumGroupByBenchmark) {
