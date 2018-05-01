@@ -46,27 +46,28 @@ namespace test {
 class ParallelAggregatesTests : public PelotonTest {};
 
 // Benchmark Parameters
-constexpr size_t benchmark_num_tuples = 20;
+constexpr size_t benchmark_num_tuples = 1000000;
 
-bool benchmark_sequential = true;
+//bool benchmark_sequential = true;
+bool benchmark_sequential = false;
 bool benchmark_parallel = true;
 
 bool print_result_table = false;
-bool print_time_components = false;
+bool print_time_components = true;
 
 // Scenarios
 
 // zipf with low q
 bool uniform = false;
 int constant = 0;
-double q = 0.5;
-int group_range = 10000;
+double q = 1.2;
+int group_range = 10000000;
 
-// uniform across 100 groups
+// uniform across groups
 //bool uniform = true;
 //int constant = 0;
 //double q = 0.0;
-//int group_range = 100;
+//int group_range = 1000000;
 
 // uniform across distinct groups
 //bool uniform = true;
@@ -108,8 +109,9 @@ void PrintRuntimeInfoParallel(executor::AggregateExecutor &executor) {
 
     total += max;
   }
-  std::cout << "======== Total Time = " << total << "===========================" << std::endl;
-  std::cout << std::endl;
+  std::cout << "======== Total Time ========================================" << std::endl;
+  std::cout << total << std::endl;
+  std::cout << "============================================================" << std::endl;
 }
 
 void PrintRuntimeInfoSequential(executor::AggregateExecutor &executor) {
@@ -125,9 +127,39 @@ void PrintRuntimeInfoSequential(executor::AggregateExecutor &executor) {
 
     total += time_elapsed;
   }
-  std::cout << "======== Total Time = " << total << "===========================" << std::endl;
+  std::cout << "======== Total Time ========================================" << std::endl;
+  std::cout << total << std::endl;
+  std::cout << "============================================================" << std::endl;
   std::cout << std::endl;
 }
+
+//TEST_F(ParallelAggregatesTests, NaivePartitioningTest) {
+//  float min_val = 0.0f;
+//  float max_val = 101.0f;
+//  size_t num_threads_ = 10;
+//  float val;
+//  size_t partition;
+//
+//  val = 2.0;
+//  partition = (size_t)(((val-min_val)/max_val) * num_threads_);
+//  EXPECT_EQ(0, partition);
+//
+//  val = 11.0;
+//  partition = (size_t)(((val-min_val)/max_val) * num_threads_);
+//  EXPECT_EQ(1, partition);
+//
+//  val = 33.0;
+//  partition = (size_t)(((val-min_val)/max_val) * num_threads_);
+//  EXPECT_EQ(3, partition);
+//
+//  val = 67.0;
+//  partition = (size_t)(((val-min_val)/max_val) * num_threads_);
+//  EXPECT_EQ(6, partition);
+//
+//  val = 100.0;
+//  partition = (size_t)(((val-min_val)/max_val) * num_threads_);
+//  EXPECT_EQ(9, partition);
+//}
 
 TEST_F(ParallelAggregatesTests, HashSumGroupByBenchmark) {
   // SELECT b, SUM(c) from table GROUP BY b;
@@ -195,9 +227,9 @@ TEST_F(ParallelAggregatesTests, HashSumGroupByBenchmark) {
     std::unique_ptr<executor::ExecutorContext> context(
         new executor::ExecutorContext(txn));
 
-    executor::AggregateExecutor executor(&node, context.get());
+    executor::AggregateExecutor *executor = new executor::AggregateExecutor(&node, context.get());
     MockExecutor child_executor;
-    executor.AddChild(&child_executor);
+    executor->AddChild(&child_executor);
 
     EXPECT_CALL(child_executor, DInit()).WillOnce(Return(true));
 
@@ -207,11 +239,11 @@ TEST_F(ParallelAggregatesTests, HashSumGroupByBenchmark) {
     EXPECT_CALL(child_executor, GetOutput())
         .WillOnce(Return(source_logical_tile1.release()));
 
-    EXPECT_TRUE(executor.Init());
+    EXPECT_TRUE(executor->Init());
 
     std::vector<std::unique_ptr<executor::LogicalTile>> tile_vec;
-    while (executor.Execute()) {
-      tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor.GetOutput()));
+    while (executor->Execute()) {
+      tile_vec.push_back(std::unique_ptr<executor::LogicalTile>(executor->GetOutput()));
     }
     txn_manager.CommitTransaction(txn);
 
@@ -221,8 +253,8 @@ TEST_F(ParallelAggregatesTests, HashSumGroupByBenchmark) {
 
     tile_vec.clear();
 
-    PrintRuntimeInfoSequential(executor);
-
+    PrintRuntimeInfoSequential(*executor);
+    delete executor;
     context.release();
   }
 

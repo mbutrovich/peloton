@@ -230,15 +230,28 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
   auto start = std::chrono::system_clock::now();
   // Grab info from plan node
   const planner::AggregatePlan &node = GetPlanNode<planner::AggregatePlan>();
-
   // Construct the output table
   auto output_table_schema =
       const_cast<catalog::Schema *>(node.GetOutputSchema());
 
   // Phase 1 //////////////////////////////////////////////////
   output_tables_[my_tid].reset(storage::TableFactory::GetTempTable(output_table_schema, false));
+
+  // NAIVE HASH TABLE ALLOCATION ////////////////////////////////////////////////////
   local_hash_tables_[my_tid] = std::make_shared<HashAggregateMapType>();
-  global_hash_tables_[my_tid] = std::make_shared<HashAggregateMapType>();
+  //////////////////////////////////////////////////////////////////////////////////
+
+  // OPTIMIZED HASH TABLE PRE-ALLOCATION ///////////////////////////////////////////
+//  constexpr size_t BYTES_PER_AGG = 16;
+//  constexpr size_t L3_CACHE_BYTES = 30000000;
+//  constexpr size_t L3_CACHE_BYTES = 2000000;
+//  size_t num_aggs = node.GetUniqueAggTerms().size();
+//  size_t num_buckets = L3_CACHE_BYTES / (BYTES_PER_AGG * num_threads_ * num_aggs);
+//  local_hash_tables_[my_tid] = std::make_shared<HashAggregateMapType>(num_buckets);
+
+//  local_hash_tables_[my_tid] = std::make_shared<HashAggregateMapType>(125000);
+//  //////////////////////////////////////////////////////////////////////////////////
+
 
   for (size_t partition = 0; partition < num_threads_; partition++) {
     partitioned_keys_[my_tid][partition] = std::make_shared<std::vector<AggKeyType>>();
@@ -287,6 +300,18 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
   // Phase 2
   ///////////////////////////////////////////////////////////////////
   start = std::chrono::system_clock::now();
+
+  // NAIVE GLOBAL HASH ALLOCATION //////////////////////////////////////
+  global_hash_tables_[my_tid] = std::make_shared<HashAggregateMapType>();
+  ///////////////////////////////////////////////////////////////////////
+
+  // OPTIMIZED GLOBAL HASH ALLOCATION //////////////////////////////////////
+//  size_t max_buckets = 0;
+//  for (size_t list_tid = 0; list_tid < num_threads_; list_tid++) {
+//    max_buckets = std::max(max_buckets, partitioned_keys_[list_tid][my_tid]->size());
+//  }
+//  global_hash_tables_[my_tid] = std::make_shared<HashAggregateMapType>(max_buckets);
+  ///////////////////////////////////////////////////////////////////////
 
   // declare this thread's global hash table (a partition of the whole keyspace)
   HashAggregateMapType *my_global_hash_table = global_hash_tables_[my_tid].get();

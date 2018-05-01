@@ -280,10 +280,22 @@ bool ParallelHashAggregator::Advance(AbstractTuple *cur_tuple) {
   }
 
   auto map_itr = aggregates_map->find(group_by_key_values);
-  ValueVectorHasher value_hasher;
   // Group not found. Make a new entry in the hash for this new group.
   if (map_itr == aggregates_map->end()) {
-    size_t partition = value_hasher(group_by_key_values) % num_threads_;
+
+
+    // NAIVE DISTRIBUTION VIA UNIFORM PARTITIONING FOM TO MIN TO MAX //////
+    float min_val = 0.0f;
+    float max_val = 10000001.0f; // 1 greater than the max possible value
+    float val = static_cast<float>(cur_tuple->GetValue(node->GetGroupbyColIds()[0]).GetAs<int32_t>());
+    size_t partition = (size_t)(((val-min_val)/max_val) * num_threads_);
+    ////////////////////////////////////////////////////////////////////////
+
+    // SMART DISTRIBUTION VIA HASHING ////////////////////////////////////
+//     ValueVectorHasher value_hasher;
+//     size_t partition = value_hasher(group_by_key_values) % num_threads_;
+    //////////////////////////////////////////////////////////////////////
+
     partitioned_keys[partition]->push_back(group_by_key_values);
 
     LOG_TRACE("Group-by key not found. Start a new group.");
