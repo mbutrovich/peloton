@@ -57,7 +57,7 @@ class AggregateExecutor : public AbstractExecutor {
 
   static constexpr size_t num_threads_ = 8;
   static constexpr size_t num_phases_ = 5;
-  std::chrono::duration<double> timers_[num_phases_][num_threads_];
+  double timers_[num_phases_][num_threads_];
 
  protected:
   bool DInit();

@@ -46,7 +46,7 @@ namespace test {
 class ParallelAggregatesTests : public PelotonTest {};
 
 // Benchmark Parameters
-constexpr size_t benchmark_num_tuples = 10000000;
+constexpr size_t benchmark_num_tuples = 1000000;
 
 //bool benchmark_sequential = true;
 bool benchmark_sequential = false;
@@ -68,7 +68,7 @@ bool print_time_components = true;
 bool uniform = true;
 int constant = 0;
 double q = 0.0;
-int group_range = 10000000;
+int group_range = 100000;
 
 // uniform across distinct groups
 //bool uniform = true;
@@ -85,7 +85,7 @@ int group_range = 10000000;
 void PrintRuntimeInfoParallel(executor::AggregateExecutor &executor) {
   std::cout << std::endl;
   std::cout << "======== TIMING INFO (Parallel) --======================" << std::endl;
-  double total = 0;
+  double total = 0.0;
   for (size_t i=0; i < executor.num_phases_; i++) {
     double max = 0.0;
 
@@ -94,7 +94,7 @@ void PrintRuntimeInfoParallel(executor::AggregateExecutor &executor) {
     }
 
     for (size_t j = 0; j < executor.num_threads_; j++) {
-      double time_elapsed = executor.timers_[i][j].count();
+      double time_elapsed = executor.timers_[i][j];
 
       if (print_time_components) {
         std::cout << "T" << j << " " << time_elapsed << " ";
@@ -111,7 +111,7 @@ void PrintRuntimeInfoParallel(executor::AggregateExecutor &executor) {
     total += max;
   }
   std::cout << "======== Total Time ========================================" << std::endl;
-  std::cout << total << std::endl;
+  std::cout << total << " ms" << std::endl;
   std::cout << "============================================================" << std::endl;
 }
 
@@ -120,7 +120,7 @@ void PrintRuntimeInfoSequential(executor::AggregateExecutor &executor) {
   std::cout << "======== TIMING INFO (Sequential) --=====================" << std::endl;
   double total = 0;
   for (size_t i=0; i < executor.num_phases_; i++) {
-    double time_elapsed = executor.timers_[i][0].count();
+    double time_elapsed = executor.timers_[i][0];
 
     if (print_time_components) {
       std::cout << "Phase " << i << " = " << time_elapsed << std::endl;
@@ -129,7 +129,7 @@ void PrintRuntimeInfoSequential(executor::AggregateExecutor &executor) {
     total += time_elapsed;
   }
   std::cout << "======== Total Time ========================================" << std::endl;
-  std::cout << total << std::endl;
+  std::cout << total << " ms" << std::endl;
   std::cout << "============================================================" << std::endl;
   std::cout << std::endl;
 }

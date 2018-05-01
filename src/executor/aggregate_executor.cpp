@@ -130,7 +130,7 @@ bool AggregateExecutor::DExecuteSequential() {
     }
   }
   LOG_TRACE("Finished processing logical tile");
-  timers_[0][0] = std::chrono::system_clock::now() - start;
+  timers_[0][0] = std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - start).count();
 
   start = std::chrono::system_clock::now();
   LOG_TRACE("Finalizing..");
@@ -194,7 +194,7 @@ bool AggregateExecutor::DExecuteSequential() {
   SetOutput(result[result_itr]);
   result_itr++;
 
-  timers_[1][0] = std::chrono::system_clock::now() - start;
+  timers_[1][0] = std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - start).count();
 
   return true;
 }
@@ -281,7 +281,7 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
   }
   LOG_TRACE("Finished processing logical tile");
 
-  timers_[0][my_tid] = std::chrono::system_clock::now() - start;
+  timers_[0][my_tid] = std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - start).count();
   // End Phase 1 //////////////////////////////////////////////////
 
   // Barrier 1: to ensure all threads wait until phase 1 is complete
@@ -294,7 +294,7 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
   }
 
   while(phase_1_completed_.load() == false);
-  timers_[1][my_tid] = std::chrono::system_clock::now() - start;
+  timers_[1][my_tid] = std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - start).count();
 
   //////////////////////////////////////////////////////////////////
   // Phase 2
@@ -341,7 +341,7 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
       }
     }
   }
-  timers_[2][my_tid] = std::chrono::system_clock::now() - start;
+  timers_[2][my_tid] = std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - start).count();
 
 
   // Phase: Materialization
@@ -353,7 +353,7 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
     output_tables_[my_tid].reset();
     output_tables_[my_tid] = nullptr;
   }
-  timers_[3][my_tid] = std::chrono::system_clock::now() - start;
+  timers_[3][my_tid] = std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - start).count();
 
   // Barrier to ensure all threads wait until phase 2 is complete
   start = std::chrono::system_clock::now();
@@ -364,7 +364,7 @@ void AggregateExecutor::ParallelAggregatorThread(size_t my_tid, std::shared_ptr<
   }
 
   while(phase_2_completed_.load() == false);
-  timers_[4][my_tid] = std::chrono::system_clock::now() - start;
+  timers_[4][my_tid] = std::chrono::duration<double, std::milli>(std::chrono::system_clock::now() - start).count();
 }
 
 bool AggregateExecutor::DExecuteParallel() {
