@@ -25,7 +25,7 @@ namespace peloton {
 namespace test {
 
 const int num_inserts = 10000000;
-const uint32_t num_iterations = 3;
+const uint32_t num_iterations = 10;
 auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
 auto column_a = catalog::Column(
     type::TypeId::BIGINT, type::Type::GetTypeSize(type::TypeId::BIGINT),
@@ -48,7 +48,7 @@ TEST(DataTableBenchmark, SimpleInsertWithCC_OneTransaction) {
 
     auto txn = txn_manager.BeginTransaction();
     for (int j = 0; j < num_inserts; j++) {
-      ItemPointer tuple_slot_id = table->InsertTuple(&tuple, txn, &index_entry_ptr);
+      ItemPointer tuple_slot_id = table->InsertTuple(&tuple);
       txn_manager.PerformInsert(txn, tuple_slot_id, index_entry_ptr);
     }
     txn_manager.CommitTransaction(txn);
@@ -72,7 +72,7 @@ TEST(DataTableBenchmark, SimpleInsertWithCC_OneTransactionPerInsert) {
 
     for (int j = 0; j < num_inserts; j++) {
       auto txn = txn_manager.BeginTransaction();
-      ItemPointer tuple_slot_id = table->InsertTuple(&tuple, txn, &index_entry_ptr);
+      ItemPointer tuple_slot_id = table->InsertTuple(&tuple);
       txn_manager.PerformInsert(txn, tuple_slot_id, index_entry_ptr);
       txn_manager.CommitTransaction(txn);
       delete txn;
@@ -94,9 +94,8 @@ TEST(DataTableBenchmark, SimpleInsertWithoutCC) {
         INVALID_OID, INVALID_OID, schema, "test_table",
         1000, false, false));
 
-    auto txn = new concurrency::TransactionContext(0, IsolationLevelType::SNAPSHOT, 0);
     for (int j = 0; j < num_inserts; j++) {
-      table->InsertTuple(&tuple, txn, &index_entry_ptr);
+      table->InsertTuple(&tuple);
     }
     auto end = std::chrono::high_resolution_clock::now();
 
